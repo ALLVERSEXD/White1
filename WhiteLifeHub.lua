@@ -8535,7 +8535,7 @@ end
 ph:Actions(pAct)	
 
 -- =====================================================================
--- YADSAN X YAKUZA | NovaUI Vehicle & Player-Vehicle Module
+-- YADSAN X YAKUZA | YadsanUI Vehicle & Player-Vehicle Module
 -- =====================================================================
 do
 	local UIS = game:GetService("UserInputService")
@@ -9001,47 +9001,142 @@ do
 		end,
 	})
 
-	local function runBusAction(label, globalFnName)
-		local p = findPlayer(targetQuery)
-		if not p then
-			Window:Notify({ Title = label, Content = "Target player not found." })
-			return
-		end
-		local vf = workspace:FindFirstChild("Vehicles")
-		local hasBus = false
-		if vf then
-			for _, v in ipairs(vf:GetChildren()) do
-				if v:IsA("Model") and v.Name == "SchoolBus" then
-					local owner = v:FindFirstChild("owner") or v:FindFirstChild("owner", true)
-					if owner and owner.Value == lp then
-						hasBus = true
-						break
-					end
-				end
+	local function getNet()
+		local n = _G.net or (_G.g and _G.g.Net)
+		if not n then
+			local rs = game:GetService("ReplicatedStorage")
+			local mod = rs:FindFirstChild("Modules", true)
+			local core = mod and mod:FindFirstChild("Core")
+			local netMod = core and core:FindFirstChild("Net")
+			if netMod and netMod:IsA("ModuleScript") then
+				pcall(function() n = require(netMod) end)
 			end
 		end
-		if not hasBus then
-			if _G.net and typeof(_G.net.get) == "function" then
-				pcall(_G.net.get, "spawn_vehicle", "SchoolBus")
-			elseif _G.g and typeof(_G.g.spawn_any_vehicle) == "function" then
-				pcall(_G.g.spawn_any_vehicle, "SchoolBus")
-			end
-			task.wait(0.5)
+		return n
+	end
+
+	local function remoteGet(name, ...)
+		local n = getNet()
+		if n and typeof(n.get) == "function" then
+			return pcall(n.get, name, ...)
+		elseif _G.g and typeof(_G.g.Get) == "function" then
+			return pcall(_G.g.Get, name, ...)
 		end
-		if _G.g and typeof(_G.g[globalFnName]) == "function" then
-			pcall(_G.g[globalFnName], p)
-			Window:Notify({ Title = label, Content = label .. " triggered for " .. p.DisplayName })
-		else
-			Window:Notify({ Title = label, Content = "Handler '" .. globalFnName .. "' not present in this environment." })
+		return false
+	end
+
+	local function ensureBus()
+		local bus = getOtherVehicle(lp)
+		if bus and bus.Name == "SchoolBus" then
+			return bus
+		end
+		remoteGet("spawn_vehicle", "SchoolBus")
+		local elapsed = 0
+		while elapsed < 5 do
+			task.wait(0.2)
+			elapsed += 0.2
+			local found = getOtherVehicle(lp)
+			if found and found.Name == "SchoolBus" then
+				return found
+			end
+		end
+		return getOtherVehicle(lp)
+	end
+
+	local function sitInSeat(seat)
+		local hum = getHum()
+		local char = getChar()
+		if seat and hum and char then
+			pcall(function() char:PivotTo(seat.CFrame * CFrame.new(0, 2, 0)) end)
+			task.wait(0.15)
+			pcall(function() seat:Sit(hum) end)
+			if seat.Occupant ~= hum then
+				remoteGet("sit", seat)
+			end
 		end
 	end
 
-	secTarget:Button({ Title = "Bring Player", Callback = function() runBusAction("Bring Player", "vehicle_bring_player") end })
-	secTarget:Button({ Title = "Kill Player", Callback = function() runBusAction("Kill Player", "vehicle_kill_player") end })
-	secTarget:Button({ Title = "Void Player", Callback = function() runBusAction("Void Player", "vehicle_void_player") end })
-	secTarget:Button({ Title = "Skydive Player", Callback = function() runBusAction("Skydive Player", "vehicle_skydive_player") end })
+	local function executeBusTargetAction(actionKind, targetPlr)
+		local tRoot = targetPlr and targetPlr.Character and targetPlr.Character:FindFirstChild("HumanoidRootPart")
+		local myRoot = getRoot()
+		if not tRoot or not myRoot then
+			Window:Notify({ Title = actionKind, Content = "Target or your character is missing." })
+			return
 		end
-	
+
+		local bus = ensureBus()
+		if not bus then
+			Window:Notify({ Title = actionKind, Content = "Could not spawn or find SchoolBus." })
+			return
+		end
+
+		local seat = getSeat(bus)
+		local savedCF = myRoot.CFrame
+
+		pcall(function() bus:PivotTo(tRoot.CFrame * CFrame.new(0, 0, -6)) end)
+		sitInSeat(seat)
+		task.wait(0.2)
+
+		if actionKind == "Bring Player" then
+			pcall(function() bus:PivotTo(savedCF * CFrame.new(0, 2, -8)) end)
+		elseif actionKind == "Kill Player" then
+			pcall(function() bus:PivotTo(CFrame.new(tRoot.Position.X, -500, tRoot.Position.Z)) end)
+		elseif actionKind == "Void Player" then
+			pcall(function() bus:PivotTo(CFrame.new(tRoot.Position.X, -10000, tRoot.Position.Z)) end)
+		elseif actionKind == "Skydive Player" then
+			pcall(function() bus:PivotTo(CFrame.new(tRoot.Position.X, tRoot.Position.Y + 1200, tRoot.Position.Z)) end)
+		end
+
+		task.wait(0.25)
+		local hum = getHum()
+		if hum and hum.Sit then
+			hum:ChangeState(Enum.HumanoidStateType.Jumping)
+			task.wait(0.15)
+		end
+		if myRoot and myRoot.Parent then
+			myRoot.CFrame = savedCF
+		end
+
+		Window:Notify({ Title = actionKind, Content = actionKind .. " executed on " .. targetPlr.DisplayName })
+	end
+
+	secTarget:Button({
+		Title = "Bring Player",
+		Callback = function()
+			local p = findPlayer(targetQuery)
+			if not p then Window:Notify({ Title = "Bring Player", Content = "Target not found." }) return end
+			executeBusTargetAction("Bring Player", p)
+		end,
+	})
+
+	secTarget:Button({
+		Title = "Kill Player",
+		Callback = function()
+			local p = findPlayer(targetQuery)
+			if not p then Window:Notify({ Title = "Kill Player", Content = "Target not found." }) return end
+			executeBusTargetAction("Kill Player", p)
+		end,
+	})
+
+	secTarget:Button({
+		Title = "Void Player",
+		Callback = function()
+			local p = findPlayer(targetQuery)
+			if not p then Window:Notify({ Title = "Void Player", Content = "Target not found." }) return end
+			executeBusTargetAction("Void Player", p)
+		end,
+	})
+
+	secTarget:Button({
+		Title = "Skydive Player",
+		Callback = function()
+			local p = findPlayer(targetQuery)
+			if not p then Window:Notify({ Title = "Skydive Player", Content = "Target not found." }) return end
+			executeBusTargetAction("Skydive Player", p)
+		end,
+	})
+		end
+		
 -- ===== Home =====
 local home = Life:Section({ Title = "Home", Icon = "settings", Side = "Right" })
 home:Button({ Title = "Lock my home", Callback = function()
