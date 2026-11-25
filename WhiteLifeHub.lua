@@ -8532,10 +8532,10 @@ local pAct = {}
 for _, c in ipairs(PCOL) do
 	pAct[#pAct + 1] = { Title = c[1], Description = "Phone color", Icon = "star", Callback = function() send("phone_color", c[2]) end }
 end
-ph:Actions(pAct)
+ph:Actions(pAct)	
 
 -- =====================================================================
--- NovaUI Vehicle & Player Actions (Drop-in for Yadsan X Yakuza)
+-- YADSAN X YAKUZA | NovaUI Vehicle & Player-Vehicle Module
 -- =====================================================================
 do
 	local UIS = game:GetService("UserInputService")
@@ -8544,17 +8544,18 @@ do
 	local lp = Players.LocalPlayer
 
 	local vehTab = Window:CreateTab({ Name = "Vehicle", Icon = "bolt" })
-	local secSelf = vehTab:Section({ Title = "My Vehicle", Icon = "bolt", Side = "Left" })
+	local secVeh = vehTab:Section({ Title = "Vehicle Controls", Icon = "bolt", Side = "Left" })
 	local secFly = vehTab:Section({ Title = "Fly & Fling", Icon = "shield", Side = "Left" })
-	local secStyle = vehTab:Section({ Title = "Style, View & ESP", Icon = "eye", Side = "Right" })
-	local secPlr = vehTab:Section({ Title = "Target & Bus Actions", Icon = "users", Side = "Right" })
+	local secView = vehTab:Section({ Title = "View, Style & ESP", Icon = "eye", Side = "Right" })
+	local secTarget = vehTab:Section({ Title = "Target & Bus Actions", Icon = "users", Side = "Right" })
 
 	local vehFlySpeed = 80
 	local vehFlyConn, vehBV, vehBG
+	local autoLockConn
 	local rainbow2xConn
 	local viewVehConn, prevCamSubject
-	local vehEspConn
-	local vehEspFolder
+	local antiFlingConn
+	local vehEspConn, vehEspFolder
 
 	local function getChar()
 		return lp.Character
@@ -8570,7 +8571,7 @@ do
 		return c and c:FindFirstChild("HumanoidRootPart")
 	end
 
-	local function getMyVehicle()
+	local function getOwnedVehicle()
 		local vf = workspace:FindFirstChild("Vehicles")
 		if not vf then return nil end
 		for _, v in ipairs(vf:GetChildren()) do
@@ -8579,27 +8580,6 @@ do
 				if owner and owner:IsA("ObjectValue") and owner.Value == lp then
 					return v
 				end
-			end
-		end
-		return nil
-	end
-
-	local function getVehicleSeat(veh)
-		if not veh then return nil end
-		return veh:FindFirstChildWhichIsA("VehicleSeat", true) or veh:FindFirstChildWhichIsA("Seat", true)
-	end
-
-	local function findPlr(query)
-		query = tostring(query or ""):gsub("^%s+", ""):gsub("%s+$", ""):lower()
-		if query == "" then return nil end
-		for _, p in ipairs(Players:GetPlayers()) do
-			if p.Name:lower() == query or p.DisplayName:lower() == query then
-				return p
-			end
-		end
-		for _, p in ipairs(Players:GetPlayers()) do
-			if p.Name:lower():find(query, 1, true) or p.DisplayName:lower():find(query, 1, true) then
-				return p
 			end
 		end
 		return nil
@@ -8620,23 +8600,44 @@ do
 		return nil
 	end
 
-	local function colorVehicleParts(veh, col1, col2)
+	local function getSeat(veh)
+		if not veh then return nil end
+		return veh:FindFirstChildWhichIsA("VehicleSeat", true) or veh:FindFirstChildWhichIsA("Seat", true)
+	end
+
+	local function findPlayer(query)
+		query = tostring(query or ""):gsub("^%s+", ""):gsub("%s+$", ""):lower()
+		if query == "" then return nil end
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p.Name:lower() == query or p.DisplayName:lower() == query then
+				return p
+			end
+		end
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p.Name:lower():find(query, 1, true) or p.DisplayName:lower():find(query, 1, true) then
+				return p
+			end
+		end
+		return nil
+	end
+
+	local function paintVehicle(veh, colA, colB)
 		if not veh then return end
-		local parts = {}
+		local bodyParts = {}
 		for _, d in ipairs(veh:GetDescendants()) do
 			if d:IsA("BasePart") and d.Name ~= "HumanoidRootPart" then
 				local n = d.Name:lower()
 				if not n:find("wheel") and not n:find("tire") and not n:find("glass") and not n:find("window") then
-					table.insert(parts, d)
+					table.insert(bodyParts, d)
 				end
 			end
 		end
-		for idx, p in ipairs(parts) do
+		for i, part in ipairs(bodyParts) do
 			pcall(function()
-				if col2 and idx % 2 == 0 then
-					p.Color = col2
+				if colB and i % 2 == 0 then
+					part.Color = colB
 				else
-					p.Color = col1
+					part.Color = colA
 				end
 			end)
 		end
@@ -8650,11 +8651,10 @@ do
 
 	local function startVehFly()
 		stopVehFly()
-		local veh = getMyVehicle()
-		local seat = getVehicleSeat(veh)
-		local anchor = seat or (veh and veh.PrimaryPart) or (veh and veh:FindFirstChildWhichIsA("BasePart", true))
+		local veh = getOwnedVehicle()
+		local anchor = getSeat(veh) or (veh and veh.PrimaryPart) or (veh and veh:FindFirstChildWhichIsA("BasePart", true))
 		if not anchor then
-			Window:Notify({ Title = "Vehicle Fly", Content = "Spawn a vehicle and sit in it first." })
+			Window:Notify({ Title = "Vehicle Fly", Content = "Spawn a vehicle first." })
 			return
 		end
 
@@ -8676,15 +8676,13 @@ do
 				stopVehFly()
 				return
 			end
-			local moveDir = hum and hum.MoveDirection or Vector3.zero
-			local lookFlat = Vector3.new(cam.CFrame.LookVector.X, 0, cam.CFrame.LookVector.Z)
-			local rightFlat = Vector3.new(cam.CFrame.RightVector.X, 0, cam.CFrame.RightVector.Z)
-			if lookFlat.Magnitude > 0 then lookFlat = lookFlat.Unit end
-			if rightFlat.Magnitude > 0 then rightFlat = rightFlat.Unit end
+			local md = hum and hum.MoveDirection or Vector3.zero
+			local look = Vector3.new(cam.CFrame.LookVector.X, 0, cam.CFrame.LookVector.Z)
+			local right = Vector3.new(cam.CFrame.RightVector.X, 0, cam.CFrame.RightVector.Z)
+			if look.Magnitude > 0 then look = look.Unit end
+			if right.Magnitude > 0 then right = right.Unit end
 
-			local fwd = moveDir:Dot(lookFlat)
-			local side = moveDir:Dot(rightFlat)
-			local vel = (cam.CFrame.LookVector * fwd + cam.CFrame.RightVector * side) * vehFlySpeed
+			local vel = (cam.CFrame.LookVector * md:Dot(look) + cam.CFrame.RightVector * md:Dot(right)) * vehFlySpeed
 			if UIS:IsKeyDown(Enum.KeyCode.Space) then
 				vel += Vector3.new(0, vehFlySpeed, 0)
 			end
@@ -8697,86 +8695,86 @@ do
 		end)
 	end
 
-	-- ===== My Vehicle =====
-	local chosenVehName = "Monster Truck"
-	secSelf:Input({
+	-- ===== Vehicle Controls =====
+	local spawnName = "Monster Truck"
+	secVeh:Input({
 		Placeholder = "Vehicle name (e.g. Monster Truck)",
-		Callback = function(txt)
-			if txt and txt ~= "" then
-				chosenVehName = txt
+		Callback = function(t)
+			if t and t ~= "" then
+				spawnName = t
 			end
 		end,
 	})
 
-	secSelf:Button({
+	secVeh:Button({
 		Title = "Spawn Vehicle",
 		Style = "Primary",
 		Callback = function()
-			local ok = pcall(function()
-				if _G.g and typeof(_G.g.spawn_any_vehicle) == "function" then
-					_G.g.spawn_any_vehicle(chosenVehName)
-				end
-			end)
-			Window:Notify({ Title = "Vehicle", Content = ok and ("Spawning " .. chosenVehName) or "Spawn trigger sent." })
+			if _G.net and typeof(_G.net.get) == "function" then
+				pcall(_G.net.get, "spawn_vehicle", spawnName)
+			elseif _G.g and typeof(_G.g.spawn_any_vehicle) == "function" then
+				pcall(_G.g.spawn_any_vehicle, spawnName)
+			end
+			Window:Notify({ Title = "Vehicle", Content = "Requested spawn: " .. spawnName })
 		end,
 	})
 
-	secSelf:Button({
+	secVeh:Button({
 		Title = "Despawn Vehicle",
 		Callback = function()
-			local veh = getMyVehicle()
+			local veh = getOwnedVehicle()
 			if not veh then
 				Window:Notify({ Title = "Vehicle", Content = "No owned vehicle found." })
 				return
 			end
-			pcall(function()
-				if _G.g and typeof(_G.g.despawn_vehicle) == "function" then
-					_G.g.despawn_vehicle(veh)
-				else
-					veh:Destroy()
-				end
-			end)
-			Window:Notify({ Title = "Vehicle", Content = "Vehicle despawned." })
+			if _G.net and typeof(_G.net.get) == "function" then
+				pcall(_G.net.get, "spawn_vehicle", veh.Name)
+			else
+				pcall(function() veh:Destroy() end)
+			end
+			Window:Notify({ Title = "Vehicle", Content = "Despawned vehicle." })
 		end,
 	})
 
-	secSelf:Toggle({
+	secVeh:Toggle({
 		Title = "Auto Lock Vehicle To Me",
 		Description = "Keeps your vehicle locked",
 		Default = false,
 		Flag = "AutoLockVehicleToMe",
 		Callback = function(on)
+			if autoLockConn then autoLockConn:Disconnect() autoLockConn = nil end
 			if on then
-				startLoop("auto_lock_veh", RunService.Heartbeat, function()
-					local veh = getMyVehicle()
+				autoLockConn = RunService.Heartbeat:Connect(function()
+					local veh = getOwnedVehicle()
 					if veh and veh:GetAttribute("locked") ~= true then
 						pcall(function() veh:SetAttribute("locked", true) end)
+						if _G.net and typeof(_G.net.get) == "function" then
+							pcall(_G.net.get, "lock_vehicle", veh)
+						end
 					end
 				end)
-			else
-				stopLoop("auto_lock_veh")
 			end
 		end,
 	})
 
-	secSelf:Button({
+	secVeh:Button({
 		Title = "Bring Vehicle To Me",
 		Callback = function()
-			local veh = getMyVehicle()
+			local veh = getOwnedVehicle()
 			local root = getRoot()
 			if veh and root then
-				pcall(function() veh:PivotTo(root.CFrame * CFrame.new(0, 3, -10)) end)
-				Window:Notify({ Title = "Vehicle", Content = "Brought vehicle to you." })
+				pcall(function() veh:PivotTo(root.CFrame * CFrame.new(0, 3, -9)) end)
+				Window:Notify({ Title = "Vehicle", Content = "Brought your vehicle to you." })
 			else
 				Window:Notify({ Title = "Vehicle", Content = "No vehicle or character found." })
 			end
 		end,
 	})
 
-	secSelf:Button({
+	secVeh:Button({
 		Title = "Go To Vehicle",
 		Callback = function()
-			local veh = getMyVehicle()
+			local veh = getOwnedVehicle()
 			local root = getRoot()
 			if veh and root then
 				pcall(function() root.CFrame = veh:GetPivot() * CFrame.new(0, 5, 0) end)
@@ -8790,7 +8788,7 @@ do
 	-- ===== Fly & Fling =====
 	secFly:Toggle({
 		Title = "Vehicle Fly",
-		Description = "Fly your vehicle with movement + Space/Shift",
+		Description = "Fly your vehicle (WASD + Space/Shift)",
 		Default = false,
 		Flag = "VehicleFly",
 		Callback = function(on)
@@ -8812,16 +8810,18 @@ do
 
 	secFly:Toggle({
 		Title = "Anti Vehicle Fling",
-		Description = "Cancels extreme velocity spikes & disables collisions on other vehicles",
+		Description = "Stops fling velocities and disables other vehicle collisions",
 		Default = false,
 		Flag = "AntiVehicleFling",
 		Callback = function(on)
+			if antiFlingConn then antiFlingConn:Disconnect() antiFlingConn = nil end
 			if on then
-				startLoop("anti_veh_fling", RunService.Stepped, function()
+				antiFlingConn = RunService.Stepped:Connect(function()
 					local vf = workspace:FindFirstChild("Vehicles")
+					local mine = getOwnedVehicle()
 					if vf then
 						for _, v in ipairs(vf:GetChildren()) do
-							if v ~= getMyVehicle() then
+							if v ~= mine then
 								for _, p in ipairs(v:GetDescendants()) do
 									if p:IsA("BasePart") then
 										p.CanCollide = false
@@ -8836,68 +8836,22 @@ do
 						root.AssemblyAngularVelocity = Vector3.zero
 					end
 				end)
-			else
-				stopLoop("anti_veh_fling")
 			end
 		end,
 	})
 
-	-- ===== Style, View & ESP =====
-	secStyle:Button({
-		Title = "Two Tone Vehicle",
-		Callback = function()
-			local veh = getMyVehicle()
-			if not veh then
-				Window:Notify({ Title = "Two Tone", Content = "No owned vehicle found." })
-				return
-			end
-			colorVehicleParts(veh, Color3.fromRGB(255, 175, 36), Color3.fromRGB(25, 25, 35))
-			Window:Notify({ Title = "Two Tone", Content = "Applied two-tone colors." })
-		end,
-	})
-
-	secStyle:Toggle({
-		Title = "Rainbow Vehicle (2x Fast)",
-		Description = "Cycles vehicle colors at 2x speed",
-		Default = false,
-		Flag = "RainbowVehicle2x",
-		Callback = function(on)
-			if rainbow2xConn then
-				rainbow2xConn:Disconnect()
-				rainbow2xConn = nil
-			end
-			if on then
-				local hue = 0
-				local accum = 0
-				rainbow2xConn = RunService.Heartbeat:Connect(function(dt)
-					accum += dt * 2
-					if accum >= 0.1 then
-						accum = 0
-						hue = (hue + 0.08) % 1
-						local veh = getMyVehicle()
-						if veh then
-							colorVehicleParts(veh, Color3.fromHSV(hue, 1, 1), nil)
-						end
-					end
-				end)
-			end
-		end,
-	})
-
-	secStyle:Toggle({
+	-- ===== View, Style & ESP =====
+	secView:Toggle({
 		Title = "View Vehicle",
-		Description = "Switch camera subject to your vehicle",
+		Description = "Focus camera on your vehicle",
 		Default = false,
 		Flag = "ViewVehicle",
 		Callback = function(on)
 			local cam = workspace.CurrentCamera
-			if viewVehConn then
-				viewVehConn:Disconnect()
-				viewVehConn = nil
-			end
+			if viewVehConn then viewVehConn:Disconnect() viewVehConn = nil end
 			if on then
-				local veh = getMyVehicle()
-				local part = getVehicleSeat(veh) or (veh and veh:FindFirstChildWhichIsA("BasePart", true))
+				local veh = getOwnedVehicle()
+				local part = getSeat(veh) or (veh and veh:FindFirstChildWhichIsA("BasePart", true))
 				if not part or not cam then
 					Window:Notify({ Title = "View Vehicle", Content = "No spawned vehicle found." })
 					return
@@ -8915,14 +8869,56 @@ do
 		end,
 	})
 
+	secView:Button({
+		Title = "Two Tone Vehicle",
+		Callback = function()
+			local veh = getOwnedVehicle()
+			if not veh then
+				Window:Notify({ Title = "Two Tone", Content = "No owned vehicle found." })
+				return
+			end
+			paintVehicle(veh, Color3.fromRGB(255, 175, 36), Color3.fromRGB(25, 25, 35))
+			Window:Notify({ Title = "Two Tone", Content = "Applied two-tone colors." })
+		end,
+	})
+
+	secView:Toggle({
+		Title = "Rainbow Vehicle (2x Fast)",
+		Description = "Cycles vehicle colors at 2x speed",
+		Default = false,
+		Flag = "RainbowVehicle2x",
+		Callback = function(on)
+			if rainbow2xConn then rainbow2xConn:Disconnect() rainbow2xConn = nil end
+			if on then
+				local hue = 0
+				local accum = 0
+				rainbow2xConn = RunService.Heartbeat:Connect(function(dt)
+					accum += dt * 2
+					if accum >= 0.1 then
+						accum = 0
+						hue = (hue + 0.08) % 1
+						local veh = getOwnedVehicle()
+						if veh then
+							local col = Color3.fromHSV(hue, 1, 1)
+							paintVehicle(veh, col, nil)
+							if _G.net and typeof(_G.net.send) == "function" then
+								pcall(_G.net.send, "vehicle_color", col, veh)
+							end
+						end
+					end
+				end)
+			end
+		end,
+	})
+
 	local function clearVehEsp()
 		if vehEspConn then vehEspConn:Disconnect() vehEspConn = nil end
 		if vehEspFolder then vehEspFolder:Destroy() vehEspFolder = nil end
 	end
 
-	secStyle:Toggle({
+	secView:Toggle({
 		Title = "Vehicle ESP",
-		Description = "Highlight vehicles in workspace",
+		Description = "Highlight vehicles through walls",
 		Default = false,
 		Flag = "VehicleESP",
 		Callback = function(on)
@@ -8932,18 +8928,16 @@ do
 			vehEspFolder.Name = "YadsanVehESP"
 			vehEspFolder.Parent = workspace
 
-			local function syncHighlights()
+			local function sync()
 				if not vehEspFolder then return end
-				for _, child in ipairs(vehEspFolder:GetChildren()) do
-					child:Destroy()
-				end
+				for _, c in ipairs(vehEspFolder:GetChildren()) do c:Destroy() end
 				local vf = workspace:FindFirstChild("Vehicles")
 				if not vf then return end
 				for _, v in ipairs(vf:GetChildren()) do
 					if v:IsA("Model") then
 						local hl = Instance.new("Highlight")
 						hl.FillColor = Color3.fromRGB(255, 175, 36)
-						hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+						hl.OutlineColor = Color3.new(1, 1, 1)
 						hl.FillTransparency = 0.55
 						hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
 						hl.Adornee = v
@@ -8952,11 +8946,11 @@ do
 				end
 			end
 
-			syncHighlights()
+			sync()
 			local vf = workspace:FindFirstChild("Vehicles")
 			if vf then
 				vehEspConn = vf.ChildAdded:Connect(function()
-					task.defer(syncHighlights)
+					task.defer(sync)
 				end)
 			end
 		end,
@@ -8964,88 +8958,88 @@ do
 
 	-- ===== Target & SchoolBus Actions =====
 	local targetQuery = ""
-	secPlr:Input({
+	secTarget:Input({
 		Placeholder = "Username or display name...",
-		Callback = function(txt)
-			targetQuery = txt or ""
+		Callback = function(t)
+			targetQuery = t or ""
 		end,
 	})
 
-	secPlr:Button({
+	secTarget:Button({
 		Title = "Teleport Car To Player",
 		Callback = function()
-			local p = findPlr(targetQuery)
-			local veh = getMyVehicle()
+			local p = findPlayer(targetQuery)
+			local veh = getOwnedVehicle()
 			local tRoot = p and p.Character and p.Character:FindFirstChild("HumanoidRootPart")
 			if p and veh and tRoot then
 				pcall(function() veh:PivotTo(tRoot.CFrame * CFrame.new(0, 4, -8)) end)
-				Window:Notify({ Title = "Vehicle", Content = "Teleported car to " .. p.DisplayName })
+				Window:Notify({ Title = "Vehicle", Content = "Teleported vehicle to " .. p.DisplayName })
 			else
-				Window:Notify({ Title = "Vehicle", Content = "Missing target player or your vehicle." })
+				Window:Notify({ Title = "Vehicle", Content = "Target or owned vehicle not found." })
 			end
 		end,
 	})
 
-	secPlr:Button({
+	secTarget:Button({
 		Title = "Steal Car",
 		Callback = function()
-			local p = findPlr(targetQuery)
+			local p = findPlayer(targetQuery)
 			local oVeh = getOtherVehicle(p)
 			local root = getRoot()
 			local hum = getHum()
 			if not p or not oVeh or not root then
-				Window:Notify({ Title = "Steal Car", Content = "Target or target vehicle not found." })
+				Window:Notify({ Title = "Steal Car", Content = "Target or their vehicle not found." })
 				return
 			end
 			root.CFrame = oVeh:GetPivot() * CFrame.new(0, 3, 0)
 			task.wait(0.15)
-			local seat = getVehicleSeat(oVeh)
+			local seat = getSeat(oVeh)
 			if seat and hum then
 				pcall(function() seat:Sit(hum) end)
 			end
-			pcall(function()
-				if _G.g and typeof(_G.g.steal_car_functionality) == "function" then
-					_G.g.steal_car_functionality(p)
-				end
-			end)
-			Window:Notify({ Title = "Steal Car", Content = "Attempted to take " .. p.DisplayName .. "'s vehicle." })
+			Window:Notify({ Title = "Steal Car", Content = "Moved to " .. p.DisplayName .. "'s vehicle." })
 		end,
 	})
 
-	local function runBusAction(actionName, fnGlobal)
-		local p = findPlr(targetQuery)
+	local function runBusAction(label, globalFnName)
+		local p = findPlayer(targetQuery)
 		if not p then
-			Window:Notify({ Title = actionName, Content = "Target player not found." })
+			Window:Notify({ Title = label, Content = "Target player not found." })
 			return
 		end
 		local vf = workspace:FindFirstChild("Vehicles")
-		local bus
+		local hasBus = false
 		if vf then
 			for _, v in ipairs(vf:GetChildren()) do
 				if v:IsA("Model") and v.Name == "SchoolBus" then
 					local owner = v:FindFirstChild("owner") or v:FindFirstChild("owner", true)
 					if owner and owner.Value == lp then
-						bus = v
+						hasBus = true
 						break
 					end
 				end
 			end
 		end
-		if not bus and _G.g and typeof(_G.g.spawn_any_vehicle) == "function" then
-			pcall(_G.g.spawn_any_vehicle, "SchoolBus")
-		end
-		pcall(function()
-			if _G.g and typeof(_G.g[fnGlobal]) == "function" then
-				_G.g[fnGlobal](p)
+		if not hasBus then
+			if _G.net and typeof(_G.net.get) == "function" then
+				pcall(_G.net.get, "spawn_vehicle", "SchoolBus")
+			elseif _G.g and typeof(_G.g.spawn_any_vehicle) == "function" then
+				pcall(_G.g.spawn_any_vehicle, "SchoolBus")
 			end
-		end)
-		Window:Notify({ Title = actionName, Content = actionName .. " triggered for " .. p.DisplayName })
+			task.wait(0.5)
+		end
+		if _G.g and typeof(_G.g[globalFnName]) == "function" then
+			pcall(_G.g[globalFnName], p)
+			Window:Notify({ Title = label, Content = label .. " triggered for " .. p.DisplayName })
+		else
+			Window:Notify({ Title = label, Content = "Handler '" .. globalFnName .. "' not present in this environment." })
+		end
 	end
 
-	secPlr:Button({ Title = "Bring Player", Callback = function() runBusAction("Bring Player", "vehicle_bring_player") end })
-	secPlr:Button({ Title = "Kill Player", Callback = function() runBusAction("Kill Player", "vehicle_kill_player") end })
-	secPlr:Button({ Title = "Void Player", Callback = function() runBusAction("Void Player", "vehicle_void_player") end })
-	secPlr:Button({ Title = "Skydive Player", Callback = function() runBusAction("Skydive Player", "vehicle_skydive_player") end })
+	secTarget:Button({ Title = "Bring Player", Callback = function() runBusAction("Bring Player", "vehicle_bring_player") end })
+	secTarget:Button({ Title = "Kill Player", Callback = function() runBusAction("Kill Player", "vehicle_kill_player") end })
+	secTarget:Button({ Title = "Void Player", Callback = function() runBusAction("Void Player", "vehicle_void_player") end })
+	secTarget:Button({ Title = "Skydive Player", Callback = function() runBusAction("Skydive Player", "vehicle_skydive_player") end })
 		end
 	
 -- ===== Home =====
