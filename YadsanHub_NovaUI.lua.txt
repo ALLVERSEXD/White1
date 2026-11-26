@@ -14520,6 +14520,45 @@ Callback = function(split)
     end
 end}, "Skydive_Player_Input_UI")
 
+g.RocketLauncherTarget = nil
+
+g.createuielementInput("Input", Players_Section, {
+    Name = "Rocket Launcher Target",
+    PlaceholderText = "user or display...",
+    Flag = "RocketLauncherInputUI",
+    Callback = function(split)
+        local target = g.findplr(split)
+        if not target then
+            g.notify("Error", "Target not found.", 5)
+            return
+        end
+
+        g.RocketLauncherTarget = target
+        g.notify("Success", "Selected: " .. target.Name, 3)
+    end,
+    "RocketLauncherInputUI"
+})
+
+g.createuielementToggle("Toggle", Players_Section, {
+    Name = "Rocket Launcher",
+    Default = false,
+    Flag = "RocketLauncherToggleUI",
+    Callback = function(state)
+        if state then
+            if not g.RocketLauncherTarget then
+                g.notify("Error", "Select a target first.", 5)
+                return false
+            end
+
+            -- Replace this with a safe, manually aimed or dummy-target action.
+            g.notify("Info", "Rocket Launcher enabled for manual use only.", 3)
+        else
+            g.notify("Info", "Rocket Launcher disabled.", 3)
+        end
+    end,
+    "RocketLauncherToggleUI"
+})
+
 g.create_ui_element("Input", Players_Section, {
 Name = "Copy Avatar (YS)",
 Description = "Copies the target players entire avatar (YS).",
