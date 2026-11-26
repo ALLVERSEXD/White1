@@ -16351,7 +16351,7 @@ do
 
     -- Announcement
     task.spawn(function()
-        local text = "------------------//////FLAMES HUB GOLD LOADED (🎩Made by Yadsan_Godverse -- CELESTIAL SYNDICATE ON TOP 🔮 ////////--------------------"
+        local text = "------------------////// CELESTIAL LIFE HUB LOADED (Made by Yadsan_Godverse) -- CELESTIAL SYNDICATE ON TOP 🔝🚀\\\\\\\\--------------------"
         pcall(function()
             if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
                 local textChannels = TextChatService:FindFirstChild("TextChannels") or TextChatService:WaitForChild("TextChannels", 10)
