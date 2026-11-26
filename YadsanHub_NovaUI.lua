@@ -13734,7 +13734,7 @@ Callback = function()
     end
     wait(0.25)
     if not opened then
-        if g.AllClipboards then g.AllClipboards("https://discord.gg/yadsan_godverse_78097") end
+        if g.AllClipboards then g.AllClipboards("https://discord.gg/gW65gk7tg") end
         if g.notify then g.notify("Success", "Successfully copied Discord server link to your Clipboard.", 5) end
     end
 end,})
