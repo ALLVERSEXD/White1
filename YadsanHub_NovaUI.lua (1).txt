@@ -14520,6 +14520,127 @@ Callback = function(split)
     end
 end}, "Skydive_Player_Input_UI")
 
+g.RocketLauncher_Target = g.RocketLauncher_Target or nil
+g.RocketLauncher_Enabled = g.RocketLauncher_Enabled or false
+g.RocketLauncher_Conn = g.RocketLauncher_Conn or nil
+
+g.findplr = g.findplr or function(query)
+	if g.FindPlayer then
+		return g.FindPlayer(query)
+	end
+	if not query or tostring(query) == "" then return nil end
+	local q = tostring(query):lower()
+	for _, plr in ipairs(game:GetService("Players"):GetPlayers()) do
+		if plr.Name:lower():find(q, 1, true) or plr.DisplayName:lower():find(q, 1, true) then
+			return plr
+		end
+	end
+	return nil
+end
+
+local function getRocketTool()
+	local lp = g.LocalPlayer or game:GetService("Players").LocalPlayer
+	local char = lp and lp.Character
+	local backpack = lp and lp:FindFirstChildOfClass("Backpack")
+	for _, container in ipairs({ char, backpack }) do
+		if container then
+			for _, item in ipairs(container:GetChildren()) do
+				if item:IsA("Tool") and (item.Name:lower():find("rocket") or item.Name:lower():find("launcher") or item.Name:lower():find("rpg")) then
+					return item
+				end
+			end
+		end
+	end
+	return nil
+end
+
+local function fireAtTarget(targetPlr)
+	local lp = g.LocalPlayer or game:GetService("Players").LocalPlayer
+	local myChar = lp and lp.Character
+	local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+	local tChar = targetPlr and targetPlr.Character
+	local tRoot = tChar and (tChar:FindFirstChild("HumanoidRootPart") or tChar:FindFirstChild("Head"))
+	if not (myRoot and tRoot) then return end
+
+	-- Face / aim toward target
+	local aimPos = tRoot.Position
+	myRoot.CFrame = CFrame.lookAt(myRoot.Position, Vector3.new(aimPos.X, myRoot.Position.Y, aimPos.Z))
+
+	local tool = getRocketTool()
+	if tool then
+		local hum = myChar:FindFirstChildOfClass("Humanoid")
+		if hum and tool.Parent ~= myChar then
+			pcall(function() hum:EquipTool(tool) end)
+		end
+		pcall(function()
+			if tool.Activate then
+				tool:Activate()
+			end
+		end)
+	end
+
+	-- Optional Net / Remote fallback if the game uses a custom projectile/rocket event
+	if g.Send and typeof(g.Send) == "function" then
+		pcall(function()
+			g.Send("fire_rocket", aimPos, tRoot)
+		end)
+	end
+end
+
+g.set_rocket_launcher_target = g.set_rocket_launcher_target or function(query)
+	local target = g.findplr(query)
+	if not target then
+		if g.notify then g.notify("Error", "Target not found.", 5) end
+		g.RocketLauncher_Target = nil
+		return nil
+	end
+	g.RocketLauncher_Target = target
+	if g.notify then g.notify("Success", "Rocket Launcher target set to: " .. target.DisplayName .. " (@" .. target.Name .. ")", 4) end
+	return target
+end
+
+g.toggle_rocket_launcher = g.toggle_rocket_launcher or function(state, query)
+	if query and tostring(query) ~= "" then
+		g.set_rocket_launcher_target(query)
+	end
+
+	if state == false then
+		g.RocketLauncher_Enabled = false
+		if g.RocketLauncher_Conn then
+			g.RocketLauncher_Conn:Disconnect()
+			g.RocketLauncher_Conn = nil
+		end
+		if g.notify then g.notify("Info", "Rocket Launcher auto-target disabled.", 3) end
+		return
+	end
+
+	if not g.RocketLauncher_Target or not g.RocketLauncher_Target.Parent then
+		if g.notify then g.notify("Error", "Target not found.", 5) end
+		g.RocketLauncher_Enabled = false
+		return
+	end
+
+	g.RocketLauncher_Enabled = true
+	if g.RocketLauncher_Conn then
+		g.RocketLauncher_Conn:Disconnect()
+		g.RocketLauncher_Conn = nil
+	end
+
+	local lastShot = 0
+	g.RocketLauncher_Conn = game:GetService("RunService").Heartbeat:Connect(function()
+		if not g.RocketLauncher_Enabled then return end
+		local target = g.RocketLauncher_Target
+		if not target or not target.Parent or target == (g.LocalPlayer or game:GetService("Players").LocalPlayer) then
+			g.toggle_rocket_launcher(false)
+			return
+		end
+		if os.clock() - lastShot >= 0.35 then
+			lastShot = os.clock()
+			pcall(fireAtTarget, target)
+		end
+	end)
+end
+
 g.create_ui_element("Input", Players_Section, {
 Name = "Copy Avatar (YS)",
 Description = "Copies the target players entire avatar (YS).",
