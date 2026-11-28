@@ -1,0 +1,2486 @@
+--[[
+    YadsanXD
+    Life Together Rp edition
+--]]
+
+local YadsanXD = {
+    Version = "v1.0",
+    Title = "YadsanXD",
+    SubTitle = "NEW UPDATE | Life Together Rp",
+    Connections = {},
+    Toggles = {},
+    ESPObjects = {},
+    ActiveObjects = {},
+    TargetPlayer = nil,
+    SavedWalkSpeed = nil,
+    SavedJumpPower = nil,
+    SelectedMusic = 1843559048,
+    SelectedProp = "Blocks",
+    SelectedHouseLot = 1,
+    SelectedFireColor = "White",
+    SelectedDupeItem = "Equipped Tool",
+    DupeAmount = 25,
+    OrbitAngle = 0,
+    OrbitRadius = 6,
+    OrbitSpeed = 4,
+}
+
+-- [ Core Services ]
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+local HttpService = game:GetService("HttpService")
+local CoreGui = game:GetService("CoreGui")
+local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
+
+-- [ Clean Previous Instances in CoreGui & Hui ]
+for _, p in ipairs({CoreGui, (gethui and gethui())}) do
+    if p then
+        for _, c in ipairs(p:GetChildren()) do
+            if c.Name == "WindUI" or c.Name:sub(1, 7) == "WindUI/" or c.Name == "YadsanXD" or c.Name:sub(1, 8) == "YadsanXD" then
+                pcall(function() c:Destroy() end)
+            end
+        end
+    end
+end
+
+-- [ UI Library Loader ]
+local function loadRayfield()
+    local cacheFiles = { "yadsanxd/rayfield_gen2.lua", "rayfield_gen2.lua" }
+    if typeof and typeof(isfile) == "function" and typeof(readfile) == "function" then
+        for _, path in ipairs(cacheFiles) do
+            if isfile(path) then
+                local ok, cached = pcall(readfile, path)
+                if ok and type(cached) == "string" and #cached > 50000 then
+                    local loadOk, lib = pcall(function() return loadstring(cached)() end)
+                    if loadOk and lib and type(lib.CreateWindow) == "function" then
+                        return lib
+                    end
+                end
+            end
+        end
+    end
+
+    local endpoints = {
+        "https://github.com/SiriusSoftwareLtd/rayfield-gen2/releases/download/1.2.6/bundled.luau",
+        "https://github.com/SiriusSoftwareLtd/rayfield-gen2/releases/latest/download/bundled.luau",
+        "https://sirius.menu/gen2",
+    }
+
+    local req = (type(request) == "function" and request)
+        or (type(http_request) == "function" and http_request)
+        or (type(syn) == "table" and type(syn.request) == "function" and syn.request)
+        or (type(http) == "table" and type(http.request) == "function" and http.request)
+
+    for _, url in ipairs(endpoints) do
+        local src = nil
+        local ok, res = pcall(function() return game:HttpGet(url) end)
+        if ok and type(res) == "string" and #res > 50000 then
+            src = res
+        elseif req then
+            local ok2, res2 = pcall(req, { Url = url, Method = "GET" })
+            if ok2 and type(res2) == "table" and res2.StatusCode == 200 and type(res2.Body) == "string" and #res2.Body > 50000 then
+                src = res2.Body
+            end
+        end
+
+        if src then
+            local loadOk, lib = pcall(function() return loadstring(src)() end)
+            if loadOk and lib and type(lib.CreateWindow) == "function" then
+                if type(writefile) == "function" then
+                    task.spawn(function()
+                        pcall(function()
+                            if type(makefolder) == "function" and type(isfolder) == "function" and not isfolder("yadsanxd") then
+                                makefolder("yadsanxd")
+                            end
+                            writefile("yadsanxd/rayfield_gen2.lua", src)
+                        end)
+                    end)
+                end
+                return lib
+            end
+        end
+    end
+
+    error("Failed to load YadsanXD V1.0 from GitHub release mirrors and sirius.menu.", 0)
+end
+
+local Rayfield = loadRayfield()
+local Window
+
+-- [ Remotes Resolver (Lazy Loaded for Instant Launch) ]
+local Remotes = setmetatable({}, {
+    __index = function(t, k)
+        local re = ReplicatedStorage:FindFirstChild("RE") or ReplicatedStorage:WaitForChild("RE", 2)
+        if not re then return nil end
+        local map = {
+            RPNameText = "1RPNam1eTex1t",
+            RPNameColor = "1RPNam1eColo1r",
+            Tool = "1Too1l",
+            ClearTools = "1Clea1rTool1s",
+            AvatarUpdate = "1Updat1eAvata1r",
+            BabyFollow = "1Bab1yFollo1w",
+            Car = "1Ca1r",
+            PlayersCar = "1Player1sCa1r",
+            PlayersHouse = "1Player1sHous1e",
+            RPHouseEvent = "1RPHous1eEven1t",
+            RPHouseColor = "1RPHous1eEven1tColo1r",
+            PlayerTrigger = "1Playe1rTrigge1rEven1t",
+            Props = "Props",
+        }
+        local remoteName = map[k] or k
+        local r = re:FindFirstChild(remoteName)
+        if r then rawset(t, k, r) end
+        return r
+    end
+})
+
+-- [ Helper Functions ]
+local function notify(title, content, duration)
+    pcall(function()
+        if Window and Window.Notify and not Window.unloaded then
+            Window:Notify({
+                Title = title or "YadsanXD",
+                Content = content or "",
+                Duration = duration or 2.5,
+            })
+        end
+    end)
+end
+
+local function getPlayerList()
+    local names = {}
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            table.insert(names, player.Name)
+        end
+    end
+    table.sort(names)
+    if #names == 0 then table.insert(names, "None") end
+    return names
+end
+
+local function getPlayerByName(name)
+    if not name or name == "" or name == "None" then return nil end
+    return Players:FindFirstChild(name)
+end
+
+local CurrentChar = LocalPlayer.Character
+local CurrentHRP = CurrentChar and (CurrentChar:FindFirstChild("HumanoidRootPart") or CurrentChar:FindFirstChild("Torso"))
+local CurrentHum = CurrentChar and CurrentChar:FindFirstChildOfClass("Humanoid")
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+    CurrentChar = char
+    CurrentHRP = char:WaitForChild("HumanoidRootPart", 5) or char:FindFirstChild("Torso")
+    CurrentHum = char:WaitForChild("Humanoid", 5)
+    task.wait(0.2)
+    if CurrentHum then
+        if YadsanXD.SavedWalkSpeed then CurrentHum.WalkSpeed = YadsanXD.SavedWalkSpeed end
+        if YadsanXD.SavedJumpPower then CurrentHum.JumpPower = YadsanXD.SavedJumpPower end
+        if YadsanXD.Toggles.AntiSeat then CurrentHum:SetStateEnabled(Enum.HumanoidStateType.Seated, false) end
+    end
+end)
+
+local function getChar(player)
+    if not player or player == LocalPlayer then
+        if not CurrentChar or not CurrentChar.Parent then
+            CurrentChar = LocalPlayer.Character
+        end
+        return CurrentChar
+    end
+    return player.Character
+end
+
+local function getHRP(player)
+    if not player or player == LocalPlayer then
+        if not CurrentHRP or not CurrentHRP.Parent then
+            local char = getChar()
+            CurrentHRP = char and (char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso"))
+        end
+        return CurrentHRP
+    end
+    local char = getChar(player)
+    return char and (char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso"))
+end
+
+local function getHum(player)
+    if not player or player == LocalPlayer then
+        if not CurrentHum or not CurrentHum.Parent then
+            local char = getChar()
+            CurrentHum = char and char:FindFirstChildOfClass("Humanoid")
+        end
+        return CurrentHum
+    end
+    local char = getChar(player)
+    return char and char:FindFirstChildOfClass("Humanoid")
+end
+
+local function teleportTo(cf)
+    local hrp = getHRP()
+    if hrp then
+        hrp.CFrame = typeof(cf) == "Vector3" and CFrame.new(cf) or cf
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+    end
+end
+
+-- Asynchronous non-blocking item acquisition
+local function equipToolByName(name, count)
+    count = count or 1
+    if Remotes.Tool then
+        for i = 1, count do
+            task.spawn(function()
+                pcall(function()
+                    Remotes.Tool:InvokeServer("PickingTools", name)
+                end)
+            end)
+        end
+    end
+end
+
+-- [ Waypoints ]
+local SECRET_WAYPOINTS = {
+    ["Secret Beach"] = Vector3.new(-279.0, 22.0, 1116.0),
+    ["Secret Underground"] = Vector3.new(505.0, -75.0, 143.0),
+    ["Secret Location 1"] = Vector3.new(223.2, -37.6, -153.5),
+    ["Secret 2 (Mansion)"] = Vector3.new(-350.3, 45.4, -123.7),
+    ["Secret 3 (Police Station)"] = Vector3.new(-151.8, 22.6, 7.8),
+    ["Secret Room (Workshop)"] = Vector3.new(0.0, 4.0, -495.0),
+    ["Secret Bunker"] = Vector3.new(-343.0, 4.0, -613.0),
+    ["Limbo Platform"] = Vector3.new(18.0, -28.8, -61.8),
+    ["X-Ray Room"] = Vector3.new(-349.0, 4.4, 98.0),
+    ["Inside X-Ray"] = Vector3.new(-57.2, -11.8, 109.7),
+    ["Under Boat"] = Vector3.new(-108.2, 0.3, 873.8),
+    ["Under Spawn"] = Vector3.new(-26.0, -8.5, 14.0),
+}
+
+local TOWN_WAYPOINTS = {
+    ["Spawn / Plaza"] = Vector3.new(-33.0, 4.0, -30.0),
+    ["Police Station"] = Vector3.new(-150.0, 4.0, 30.0),
+    ["Hospital"] = Vector3.new(-290.0, 4.0, 50.0),
+    ["Bank"] = Vector3.new(-14.0, 4.0, 175.0),
+    ["School"] = Vector3.new(-260.0, 4.0, 260.0),
+    ["Airport"] = Vector3.new(380.0, 4.0, -200.0),
+    ["Gas Station"] = Vector3.new(-20.0, 4.0, -320.0),
+    ["Arcade"] = Vector3.new(160.0, 4.0, -80.0),
+    ["Cemetery"] = Vector3.new(110.0, 4.0, 380.0),
+    ["Fire Station"] = Vector3.new(140.0, 4.0, 110.0),
+    ["Daycare"] = Vector3.new(170.0, 4.0, 230.0),
+    ["Motel"] = Vector3.new(-180.0, 4.0, -140.0),
+}
+
+local FLAME_PALETTES = {
+    White = { Color = Color3.fromRGB(255, 255, 255), Secondary = Color3.fromRGB(180, 180, 180) },
+    Orange = { Color = Color3.fromRGB(255, 120, 20), Secondary = Color3.fromRGB(200, 50, 0) },
+    Green = { Color = Color3.fromRGB(40, 255, 60), Secondary = Color3.fromRGB(0, 160, 20) },
+    Blue = { Color = Color3.fromRGB(20, 160, 255), Secondary = Color3.fromRGB(0, 70, 200) },
+    Purple = { Color = Color3.fromRGB(190, 50, 255), Secondary = Color3.fromRGB(110, 0, 160) },
+    Dark = { Color = Color3.fromRGB(20, 20, 20), Secondary = Color3.fromRGB(5, 5, 5) },
+}
+
+local ALL_GAME_TOOLS = {
+    "AA-12", "AUG", "AmberStaff", "Apple", "AppleGreen", "Axe", "BabyBottle", "BabyBoy",
+    "BabyGirl", "BabyHippo", "BabyMonkey", "BabyRattle", "Balloon", "Banana", "Baseball",
+    "Basketball", "Baton", "Beaker", "Binocks", "Bloxaide", "BlueRaptorSoftToy", "Bomb",
+    "Book", "Boombox", "BottledWater", "Bouquet", "Bow", "Box", "BoxOfChocolates",
+    "BreakfestPlate1", "BrushAndPalette", "Bucket", "BurgerTray", "Burrito", "CakePink",
+    "Camcorder", "Candle", "CandyBasket", "Cannon", "CarryOn", "CatWand", "Chainsaw", "ChainSaw",
+    "ChineseTray", "ChipsGreen", "ChipsRed", "ChocolateBar", "ClapperBoard", "CleaningTrolley",
+    "ClipBoard", "Coke", "Cones", "CookieChip", "CottonCandyPurple", "CreditCardBoy",
+    "CreditCardGirl", "Crutches", "Cuffs", "Cupcake", "DSLR Camera", "DessertTray",
+    "DinnerPlate1", "DinnerPlate2", "DinnerPlate3", "Donut", "DrumSticks", "DuffelBag",
+    "ElectricGuitar", "EmergencyButton", "Envelope", "FireExtinguisher", "FireX",
+    "FireworksBasket", "FishingRod", "Flashlight", "FlowerPot", "FoamFinger", "FoodCart",
+    "FoodTray", "Football", "FrapMint", "FrapStrawberry", "GiftBag", "GlendaWand",
+    "GlowingBatons", "GoldBar", "GrapplingHook", "Guda", "Guitar", "Hamburger", "Hammer",
+    "Hershey", "HorseBrush", "HotDog", "Icecream", "KeyFab", "Knife", "Ladder",
+    "Laptop", "LaserGun", "LaundryBasket", "Letter", "Lollipop", "LunchPlate1",
+    "MagnifyingGlass", "MarshmallowStick", "MedicalBag", "MedicalGloves", "Microphone",
+    "Milk", "Mocha", "MoneyBag", "Mop", "MuffinBlueBerry", "Mug", "NailGun", "Newspaper",
+    "PaintBrush", "PaintRoller", "Pancakes", "PaperBag", "Parachute", "PetFoodBowl",
+    "Pizza", "PizzaBox", "Popcorn", "Popsicle", "Present", "Pretzel", "PrisonTray",
+    "PropMaker", "RadarGun", "Rake", "Reeses", "Ribbon", "Roses", "Sandwich", "Saucepan",
+    "SchoolBag", "Scissors", "Scrubs", "Shield", "ShotPBlue", "Shovel", "Sign", "Skateboard",
+    "SleepingBag", "SmokeGrenade", "Snowball", "SnowballCannon", "Snowboard", "SoccerBall",
+    "Spatula", "Stethoscope", "StopSign", "Stretcher", "Suitcase", "Syringe", "Taco",
+    "TakeOut", "TakeOutHappyBurger", "TakeOutPizza", "TapeMeasure", "Taser", "Tea",
+    "TeddyBear", "TennisRacket", "Thermos", "Ticket", "Toast", "ToolBox", "Toothbrush",
+    "Torch", "Towel", "ToyCar", "TrashBag", "Umbrella", "UraniumRod", "Vacuum", "Vase",
+    "Wagon", "WalkieTalkie", "WaterBottle", "WaterGun", "WateringCan", "Weights",
+    "Wheelchair", "Whip", "Winchester", "WineGlass", "Wrench", "YummyBread"
+}
+
+-- [ Window Setup ]
+
+Window = Rayfield:CreateWindow({
+    Name = "YadsanXD",
+    Subtitle = "NEW UPDATE | Life Together Rp",
+    Theme = "Default",
+})
+
+if Window and not Window.Destroy then
+    Window.Destroy = function(self)
+        if self.Unload then
+            self:Unload()
+        end
+    end
+end
+
+local function wrapTab(rawTab)
+    local wrapped = {}
+
+    function wrapped:Button(props)
+        props = props or {}
+        local ctrl = rawTab:CreateButton({
+            Name = props.Title or props.Name or "Button",
+            Description = props.Desc or props.Description,
+            Callback = props.Callback,
+        })
+        return ctrl
+    end
+
+    function wrapped:Toggle(props)
+        props = props or {}
+        local defVal = false
+        if props.Value ~= nil then
+            defVal = props.Value
+        elseif props.Default ~= nil then
+            defVal = props.Default
+        end
+        local ctrl = rawTab:CreateToggle({
+            Name = props.Title or props.Name or "Toggle",
+            Description = props.Desc or props.Description,
+            Value = defVal,
+            Callback = props.Callback,
+        })
+        if ctrl and not ctrl.Set then
+            function ctrl:Set(val, skipCallback)
+                if typeof(val) ~= "boolean" then
+                    val = not not val
+                end
+                self.value = val
+                if self._animateIndicator then
+                    pcall(function() self:_animateIndicator() end)
+                end
+                if not skipCallback and self.callback then
+                    pcall(function() self.callback(self.value) end)
+                end
+                if self.window and self.window._persist then
+                    pcall(function() self.window:_persist(self) end)
+                end
+            end
+        end
+        if ctrl and not ctrl.SetValue then
+            ctrl.SetValue = ctrl.Set
+        end
+        return ctrl
+    end
+
+    function wrapped:Slider(props)
+        props = props or {}
+        local minVal = (props.Value and props.Value.Min) or (props.Range and props.Range[1]) or 0
+        local maxVal = (props.Value and props.Value.Max) or (props.Range and props.Range[2]) or 100
+        local defVal = (props.Value and props.Value.Default) or (props.Default ~= nil and props.Default) or (typeof(props.Value) == "number" and props.Value) or minVal
+        local stepVal = props.Step or props.Increment or 1
+        local ctrl = rawTab:CreateSlider({
+            Name = props.Title or props.Name or "Slider",
+            Description = props.Desc or props.Description,
+            Range = { minVal, maxVal },
+            Increment = stepVal,
+            Value = defVal,
+            Callback = props.Callback,
+        })
+        if ctrl and not ctrl.SetValue then
+            ctrl.SetValue = ctrl.Set
+        end
+        return ctrl
+    end
+
+    function wrapped:Dropdown(props)
+        props = props or {}
+        local opts = props.Values or props.Options or {}
+        local defVal = props.Value
+        if defVal == nil then
+            defVal = props.Default
+        end
+        local ctrl = rawTab:CreateDropdown({
+            Name = props.Title or props.Name or "Dropdown",
+            Description = props.Desc or props.Description,
+            Options = opts,
+            Value = defVal,
+            MultiSelect = props.MultiSelect or false,
+            Callback = props.Callback,
+        })
+        if ctrl then
+            if not ctrl.Select then
+                ctrl.Select = ctrl.Set
+            end
+            if not ctrl.SetValue then
+                ctrl.SetValue = ctrl.Set
+            end
+        end
+        return ctrl
+    end
+
+    function wrapped:Input(props)
+        props = props or {}
+        local ctrl = rawTab:CreateInput({
+            Name = props.Title or props.Name or "Input",
+            Placeholder = props.Placeholder or "",
+            Numeric = props.Numeric or false,
+            Value = props.Value or props.Default or "",
+            Callback = props.Callback,
+        })
+        return ctrl
+    end
+
+    function wrapped:Section(props)
+        props = props or {}
+        return rawTab:CreateSection({
+            Name = props.Title or props.Name or "Section",
+        })
+    end
+
+    function wrapped:Paragraph(props)
+        props = props or {}
+        local ctrl = rawTab:CreateText({
+            Name = props.Title or props.Name or "",
+            Text = props.Desc or props.Text or "",
+        })
+        if ctrl then
+            if not ctrl.SetDesc then
+                ctrl.SetDesc = function(self, desc)
+                    if self.Set then
+                        pcall(function() self:Set(tostring(desc or "")) end)
+                    end
+                end
+            end
+            if not ctrl.SetTitle then
+                ctrl.SetTitle = function(self, title)
+                    if self.SetTitle then
+                        pcall(function() self:SetTitle(tostring(title or "")) end)
+                    end
+                end
+            end
+        end
+        return ctrl
+    end
+
+    function wrapped:Select()
+        if rawTab.Select then
+            pcall(function() rawTab:Select() end)
+        end
+    end
+
+    setmetatable(wrapped, {
+        __index = rawTab
+    })
+
+    return wrapped
+end
+
+local function createTab(props)
+    local raw = Window:CreateTab({
+        Name = props.Title or props.Name or "Tab",
+        Icon = props.Icon or props.icon,
+    })
+    return wrapTab(raw)
+end
+
+Window.Tab = function(self, props)
+    return createTab(props)
+end
+
+-- [ Tabs Definition ]
+local Tabs = {
+    Dashboard = createTab({ Title = "Dashboard", Icon = "home" }),
+    Player = createTab({ Title = "Player", Icon = "user" }),
+    Teleports = createTab({ Title = "Teleports", Icon = "map-pin" }),
+    Items = createTab({ Title = "Items & Dupe", Icon = "package" }),
+    Vehicles = createTab({ Title = "Vehicles", Icon = "car" }),
+    Carpet = createTab({ Title = "Magic Carpet", Icon = "sparkles" }),
+    Target = createTab({ Title = "Target & Troll", Icon = "crosshair" }),
+    House = createTab({ Title = "House", Icon = "lock" }),
+    Visuals = createTab({ Title = "Visuals & ESP", Icon = "eye" }),
+    Outfits = createTab({ Title = "Outfits", Icon = "shirt" }),
+    Music = createTab({ Title = "Music", Icon = "music" }),
+    Settings = createTab({ Title = "Settings", Icon = "settings" }),
+}
+
+-- [ Default Tab Selector ]
+local function selectDashboard()
+    pcall(function()
+        if Tabs.Dashboard and Tabs.Dashboard.Select then
+            Tabs.Dashboard:Select()
+        elseif Window and Window.Navigate then
+            Window:Navigate("Dashboard")
+        end
+    end)
+end
+selectDashboard()
+
+-- =========================================================================
+-- TAB 1: DASHBOARD
+-- =========================================================================
+Tabs.Dashboard:Section({ Title = "Server Info" })
+
+local StatsCard = Tabs.Dashboard:Paragraph({
+    Title = "Network & Server Status",
+    Desc = "Loading ping and players..."
+})
+
+task.spawn(function()
+    while task.wait(2.5) do
+        if not Window or Window.Destroyed then break end
+        local ping = math.floor(game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValueString():match("%d+") or 0)
+        local fps = math.floor(Workspace:GetRealPhysicsFPS())
+        local players = #Players:GetPlayers()
+        StatsCard:SetDesc(string.format("Players: %d/28  |  Ping: %d ms  |  FPS: %d", players, ping, fps))
+    end
+end)
+
+Tabs.Dashboard:Section({ Title = "Server Options" })
+
+Tabs.Dashboard:Button({
+    Title = "Rejoin Server",
+    Desc = "Rejoins the same server",
+    Callback = function()
+        game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
+    end
+})
+
+Tabs.Dashboard:Button({
+    Title = "Server Hop",
+    Desc = "Finds and joins a different public server",
+    Callback = function()
+        local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+        local success, result = pcall(function()
+            return HttpService:JSONDecode(game:HttpGet(url))
+        end)
+        if success and result and result.data then
+            for _, s in ipairs(result.data) do
+                if s.playing < s.maxPlayers and s.id ~= game.JobId then
+                    game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, s.id, LocalPlayer)
+                    return
+                end
+            end
+        end
+        notify("Server Hop", "No other servers found")
+    end
+})
+
+-- =========================================================================
+-- TAB 2: PLAYER
+-- =========================================================================
+Tabs.Player:Section({ Title = "Movement" })
+
+Tabs.Player:Slider({
+    Title = "WalkSpeed",
+    Desc = "Adjust character walking speed",
+    Value = { Min = 16, Max = 250, Default = 16 },
+    Callback = function(val)
+        YadsanXD.SavedWalkSpeed = val
+        local hum = getHum()
+        if hum then hum.WalkSpeed = val end
+    end
+})
+
+Tabs.Player:Slider({
+    Title = "JumpPower",
+    Desc = "Adjust character jump power",
+    Value = { Min = 50, Max = 300, Default = 50 },
+    Callback = function(val)
+        YadsanXD.SavedJumpPower = val
+        local hum = getHum()
+        if hum then hum.JumpPower = val end
+    end
+})
+
+Tabs.Player:Toggle({
+    Title = "Infinite Jump",
+    Desc = "Jump continuously in mid-air",
+    Value = false,
+    Callback = function(state)
+        YadsanXD.Toggles.InfJump = state
+        if state then
+            YadsanXD.Connections.InfJump = UserInputService.JumpRequest:Connect(function()
+                if YadsanXD.Toggles.InfJump then
+                    local hum = getHum()
+                    if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+                end
+            end)
+        else
+            if YadsanXD.Connections.InfJump then
+                YadsanXD.Connections.InfJump:Disconnect()
+                YadsanXD.Connections.InfJump = nil
+            end
+        end
+    end
+})
+
+Tabs.Player:Toggle({
+    Title = "Fly",
+    Desc = "Fly around the map (WASD + Space/Shift)",
+    Value = false,
+    Callback = function(state)
+        YadsanXD.Toggles.Flight = state
+        local hrp = getHRP()
+        if not hrp then return end
+
+        if state then
+            local bv = Instance.new("BodyVelocity")
+            local bg = Instance.new("BodyGyro")
+            bv.Name = "YadsanXD_FlightVelocity"
+            bg.Name = "YadsanXD_FlightGyro"
+            bv.MaxForce = Vector3.new(9e5, 9e5, 9e5)
+            bg.MaxTorque = Vector3.new(9e5, 9e5, 9e5)
+            bv.Velocity = Vector3.zero
+            bg.CFrame = hrp.CFrame
+            bv.Parent = hrp
+            bg.Parent = hrp
+
+            YadsanXD.Connections.Flight = RunService.RenderStepped:Connect(function()
+                if not YadsanXD.Toggles.Flight or not hrp.Parent then return end
+                bg.CFrame = Camera.CFrame
+                local dir = Vector3.zero
+                if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir += Camera.CFrame.LookVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir -= Camera.CFrame.LookVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir += Camera.CFrame.RightVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir -= Camera.CFrame.RightVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.Space) then dir += Vector3.new(0, 1, 0) end
+                if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then dir -= Vector3.new(0, 1, 0) end
+                bv.Velocity = dir * 65
+            end)
+        else
+            if YadsanXD.Connections.Flight then
+                YadsanXD.Connections.Flight:Disconnect()
+                YadsanXD.Connections.Flight = nil
+            end
+            for _, name in ipairs({"YadsanXD_FlightVelocity", "YadsanXD_FlightGyro"}) do
+                local inst = hrp:FindFirstChild(name)
+                if inst then inst:Destroy() end
+            end
+        end
+    end
+})
+
+Tabs.Player:Toggle({
+    Title = "Noclip",
+    Desc = "Walk directly through walls and doors",
+    Value = false,
+    Callback = function(state)
+        YadsanXD.Toggles.Noclip = state
+        if state then
+            YadsanXD.Connections.Noclip = RunService.Stepped:Connect(function()
+                if not YadsanXD.Toggles.Noclip then return end
+                local char = getChar()
+                if char then
+                    for _, part in ipairs(char:GetDescendants()) do
+                        if part:IsA("BasePart") and part.CanCollide then
+                            part.CanCollide = false
+                        end
+                    end
+                end
+            end)
+        else
+            if YadsanXD.Connections.Noclip then
+                YadsanXD.Connections.Noclip:Disconnect()
+                YadsanXD.Connections.Noclip = nil
+            end
+        end
+    end
+})
+
+Tabs.Player:Section({ Title = "Player Utilities" })
+
+Tabs.Player:Toggle({
+    Title = "Anti-Seat",
+    Desc = "Prevents your character from sitting down",
+    Value = false,
+    Callback = function(state)
+        local hum = getHum()
+        if hum then
+            hum:SetStateEnabled(Enum.HumanoidStateType.Seated, not state)
+        end
+    end
+})
+
+Tabs.Player:Toggle({
+    Title = "Click TP",
+    Desc = "Hold Ctrl and Click anywhere to teleport",
+    Value = false,
+    Callback = function(state)
+        YadsanXD.Toggles.ClickTP = state
+        if state then
+            YadsanXD.Connections.ClickTP = UserInputService.InputBegan:Connect(function(input, gpe)
+                if gpe then return end
+                if input.UserInputType == Enum.UserInputType.MouseButton1 and UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
+                    local mouse = LocalPlayer:GetMouse()
+                    if mouse.Hit then
+                        teleportTo(mouse.Hit.Position + Vector3.new(0, 3, 0))
+                    end
+                end
+            end)
+        else
+            if YadsanXD.Connections.ClickTP then
+                YadsanXD.Connections.ClickTP:Disconnect()
+                YadsanXD.Connections.ClickTP = nil
+            end
+        end
+    end
+})
+
+Tabs.Player:Toggle({
+    Title = "Freecam",
+    Desc = "Fly the camera freely through walls",
+    Value = false,
+    Callback = function(state)
+        YadsanXD.Toggles.FreeCam = state
+        local hrp = getHRP()
+        if state and hrp then
+            hrp.Anchored = true
+            Camera.CameraType = Enum.CameraType.Scriptable
+            YadsanXD.Connections.FreeCam = RunService.RenderStepped:Connect(function()
+                if not YadsanXD.Toggles.FreeCam then return end
+                local camCFrame = Camera.CFrame
+                local move = Vector3.zero
+                if UserInputService:IsKeyDown(Enum.KeyCode.W) then move += camCFrame.LookVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.S) then move -= camCFrame.LookVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.D) then move += camCFrame.RightVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.A) then move -= camCFrame.RightVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.E) then move += Vector3.new(0, 1, 0) end
+                if UserInputService:IsKeyDown(Enum.KeyCode.Q) then move -= Vector3.new(0, 1, 0) end
+                Camera.CFrame = camCFrame + (move * 1.5)
+            end)
+        else
+            if YadsanXD.Connections.FreeCam then
+                YadsanXD.Connections.FreeCam:Disconnect()
+                YadsanXD.Connections.FreeCam = nil
+            end
+            if hrp then hrp.Anchored = false end
+            Camera.CameraType = Enum.CameraType.Custom
+        end
+    end
+})
+
+-- =========================================================================
+-- TAB 3: TELEPORTS
+-- =========================================================================
+Tabs.Teleports:Section({ Title = "Secret Locations" })
+
+local secretNames = {}
+for name in pairs(SECRET_WAYPOINTS) do table.insert(secretNames, name) end
+table.sort(secretNames)
+
+local selectedSecret = secretNames[1]
+Tabs.Teleports:Dropdown({
+    Title = "Select Secret Location",
+    Values = secretNames,
+    Value = selectedSecret,
+    Callback = function(val)
+        selectedSecret = val
+    end
+})
+
+Tabs.Teleports:Button({
+    Title = "Teleport to Secret Location",
+    Desc = "Warps directly to the selected secret room",
+    Callback = function()
+        local pos = SECRET_WAYPOINTS[selectedSecret]
+        if pos then
+            teleportTo(pos)
+            notify("Teleport", "Warped to " .. selectedSecret)
+        end
+    end
+})
+
+Tabs.Teleports:Section({ Title = "Town Locations" })
+
+local townNames = {}
+for name in pairs(TOWN_WAYPOINTS) do table.insert(townNames, name) end
+table.sort(townNames)
+
+local selectedTown = townNames[1]
+Tabs.Teleports:Dropdown({
+    Title = "Select Town Location",
+    Values = townNames,
+    Value = selectedTown,
+    Callback = function(val)
+        selectedTown = val
+    end
+})
+
+Tabs.Teleports:Button({
+    Title = "Teleport to Town Location",
+    Desc = "Warps to the selected landmark",
+    Callback = function()
+        local pos = TOWN_WAYPOINTS[selectedTown]
+        if pos then
+            teleportTo(pos)
+            notify("Teleport", "Warped to " .. selectedTown)
+        end
+    end
+})
+
+-- =========================================================================
+-- TAB 4: ITEMS & DUPE
+-- =========================================================================
+Tabs.Items:Section({ Title = "Fast Item Duplicator" })
+
+Tabs.Items:Slider({
+    Title = "Dupe Amount",
+    Desc = "Number of copies to duplicate simultaneously",
+    Step = 1,
+    Value = { Min = 1, Max = 100, Default = 25 },
+    Callback = function(val)
+        YadsanXD.DupeAmount = val
+    end
+})
+
+local dupeItemsList = {
+    "Equipped Tool",
+    "ChainSaw",
+    "MoneyGun",
+    "Cannon",
+    "NuclearBarrel",
+    "Crystals",
+    "SnowballCannon",
+    "SuperCannon",
+    "DuffleBagMoney",
+}
+
+Tabs.Items:Dropdown({
+    Title = "Item to Duplicate",
+    Values = dupeItemsList,
+    Value = YadsanXD.SelectedDupeItem,
+    Callback = function(val)
+        YadsanXD.SelectedDupeItem = val
+    end
+})
+
+Tabs.Items:Button({
+    Title = "Duplicate Selected Item (Async)",
+    Desc = "Spawns item copies asynchronously with zero delay",
+    Callback = function()
+        if not Remotes.Tool then return end
+        local targetName = YadsanXD.SelectedDupeItem
+        if targetName == "Equipped Tool" then
+            local char = getChar()
+            local held = char and char:FindFirstChildOfClass("Tool")
+            if held then
+                targetName = held.Name
+            else
+                local bp = LocalPlayer:FindFirstChild("Backpack")
+                local first = bp and bp:FindFirstChildOfClass("Tool")
+                if first then
+                    targetName = first.Name
+                else
+                    notify("Dupe", "Hold an item or choose one from the list")
+                    return
+                end
+            end
+        end
+
+        for i = 1, YadsanXD.DupeAmount do
+            task.spawn(function()
+                pcall(function()
+                    Remotes.Tool:InvokeServer("PickingTools", targetName)
+                end)
+            end)
+        end
+        notify("Dupe", string.format("Duplicating %d copies of %s asynchronously!", YadsanXD.DupeAmount, targetName))
+    end
+})
+
+Tabs.Items:Button({
+    Title = "Duplicate All Backpack Items (Async)",
+    Desc = "Duplicates every tool in your inventory in parallel",
+    Callback = function()
+        if not Remotes.Tool then return end
+        local bp = LocalPlayer:FindFirstChild("Backpack")
+        local char = getChar()
+        local found = {}
+        if bp then
+            for _, t in ipairs(bp:GetChildren()) do
+                if t:IsA("Tool") and not table.find(found, t.Name) then
+                    table.insert(found, t.Name)
+                end
+            end
+        end
+        if char then
+            for _, t in ipairs(char:GetChildren()) do
+                if t:IsA("Tool") and not table.find(found, t.Name) then
+                    table.insert(found, t.Name)
+                end
+            end
+        end
+
+        if #found == 0 then
+            notify("Dupe", "No tools found in your backpack")
+            return
+        end
+
+        for _, name in ipairs(found) do
+            for i = 1, math.min(YadsanXD.DupeAmount, 25) do
+                task.spawn(function()
+                    pcall(function()
+                        Remotes.Tool:InvokeServer("PickingTools", name)
+                    end)
+                end)
+            end
+        end
+        notify("Dupe", string.format("Duplicating %d item types asynchronously!", #found))
+    end
+})
+
+Tabs.Items:Button({
+    Title = "Get All Items (Instant Async)",
+    Desc = "Concurrently fetches all missing items into backpack",
+    Callback = function()
+        local toolRemote = Remotes.Tool or (RE and RE:FindFirstChild("1Too1l"))
+        if not toolRemote then
+            notify("Items", "Tool remote not found")
+            return
+        end
+        local playerBackpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+        local playerCharacter = LocalPlayer.Character
+
+        local count = 0
+        for _, toolName in ipairs(ALL_GAME_TOOLS) do
+            task.spawn(function()
+                local hasTool = (playerBackpack and playerBackpack:FindFirstChild(toolName)) or (playerCharacter and playerCharacter:FindFirstChild(toolName))
+                if not hasTool then
+                    pcall(function()
+                        toolRemote:InvokeServer("PickingTools", toolName)
+                    end)
+                end
+            end)
+            count += 1
+        end
+        notify("Items", string.format("Fetching %d items concurrently!", count))
+    end
+})
+
+Tabs.Items:Section({ Title = "Secret Items" })
+
+local SECRET_TOOLS_LIST = {
+    ["Boom"] = "P",
+    ["Rocket Launcher"] = "32356064",
+    ["Cannon"] = "Cannon",
+    ["Nuclear Barrel"] = "NuclearBarrel",
+    ["Snow Cannon"] = "SnowballCannon",
+    ["Crystals"] = "Crystals",
+    ["Super Cannon"] = "SuperCannon",
+    ["Money Bag"] = "DuffleBagMoney",
+}
+
+for title, name in pairs(SECRET_TOOLS_LIST) do
+    Tabs.Items:Button({
+        Title = "Get " .. title,
+        Desc = "Instantly gives you " .. title,
+        Callback = function()
+            equipToolByName(name)
+            notify("Items", "Got " .. title)
+        end
+    })
+end
+
+Tabs.Items:Section({ Title = "Inventory Controls" })
+
+Tabs.Items:Button({
+    Title = "Equip All Tools",
+    Desc = "Equips every tool in your backpack at once",
+    Callback = function()
+        local char = getChar()
+        local hum = getHum()
+        if char and hum then
+            for _, t in ipairs(LocalPlayer.Backpack:GetChildren()) do
+                if t:IsA("Tool") then hum:EquipTool(t) end
+            end
+        end
+        notify("Items", "Equipped all tools")
+    end
+})
+
+Tabs.Items:Button({
+    Title = "Drop All Items",
+    Desc = "Drops all tools out of your inventory onto the floor",
+    Callback = function()
+        local hrp = getHRP()
+        if not hrp then return end
+        local n = 0
+        for _, t in ipairs(LocalPlayer.Backpack:GetChildren()) do
+            if t:IsA("Tool") then
+                t.Parent = Workspace
+                if t:FindFirstChild("Handle") then
+                    t.Handle.CFrame = hrp.CFrame * CFrame.new(math.random(-4, 4), 2, math.random(-4, 4))
+                end
+                n += 1
+            end
+        end
+        notify("Items", "Dropped " .. n .. " tools")
+    end
+})
+
+Tabs.Items:Button({
+    Title = "Clear Inventory",
+    Desc = "Deletes all tools in your backpack",
+    Callback = function()
+        if Remotes.ClearTools then Remotes.ClearTools:FireServer() end
+        for _, t in ipairs(LocalPlayer.Backpack:GetChildren()) do
+            if t:IsA("Tool") then t:Destroy() end
+        end
+        notify("Items", "Inventory cleared")
+    end
+})
+
+Tabs.Items:Section({ Title = "Prop Trails" })
+
+local TRAIL_PROPS = {
+    "Blocks", "Fire", "Bunkers", "Snowman", "Trampoline", "Horses", "Dogs", "Blue Lights"
+}
+
+Tabs.Items:Dropdown({
+    Title = "Select Prop for Trail",
+    Values = TRAIL_PROPS,
+    Value = YadsanXD.SelectedProp,
+    Callback = function(val)
+        YadsanXD.SelectedProp = val
+    end
+})
+
+Tabs.Items:Toggle({
+    Title = "Start Prop Trail",
+    Desc = "Leaves trailing props behind your character as you walk",
+    Value = false,
+    Callback = function(state)
+        YadsanXD.Toggles.Trails = state
+        if state then
+            task.spawn(function()
+                while YadsanXD.Toggles.Trails do
+                    local hrp = getHRP()
+                    if hrp then
+                        local p = Instance.new("Part")
+                        p.Size = Vector3.new(2, 2, 2)
+                        p.Position = hrp.Position - (hrp.CFrame.LookVector * 4)
+                        p.Anchored = true
+                        p.CanCollide = false
+                        p.Material = Enum.Material.Neon
+                        p.Color = Color3.fromHSV(tick() % 4 / 4, 1, 1)
+                        p.Parent = Workspace
+                        game:GetService("Debris"):AddItem(p, 3)
+                    end
+                    task.wait(0.12)
+                end
+            end)
+        end
+    end
+})
+
+-- =========================================================================
+-- TAB 5: VEHICLES
+-- =========================================================================
+Tabs.Vehicles:Section({ Title = "Car Speed & Handling" })
+
+local function findMyCar()
+    local vf = Workspace:FindFirstChild("Vehicles")
+    if not vf then return nil end
+    local name = LocalPlayer.Name
+    local direct = vf:FindFirstChild(name .. "Car")
+    if direct then return direct end
+    for _, car in ipairs(vf:GetChildren()) do
+        if car:IsA("Model") then
+            local owner = car:GetAttribute("Owner") or car:GetAttribute("OwnerName")
+            local ov = car:FindFirstChild("Owner") or car:FindFirstChild("Player")
+            if owner == name or owner == LocalPlayer.UserId
+                or (ov and (ov.Value == LocalPlayer or ov.Value == name))
+                or car.Name:sub(1, #name) == name then
+                return car
+            end
+        end
+    end
+    return nil
+end
+
+local function getCarRoot(car)
+    if not car then return nil end
+    return car.PrimaryPart
+        or car:FindFirstChild("Body")
+        or car:FindFirstChild("Base")
+        or car:FindFirstChildWhichIsA("VehicleSeat", true)
+        or car:FindFirstChildWhichIsA("BasePart", true)
+end
+
+local function getLocalCar()
+    local hum = getHum()
+    local seat = hum and hum.SeatPart
+    if seat and seat:IsA("VehicleSeat") then
+        local car = seat:FindFirstAncestorOfClass("Model")
+        return car or seat.Parent, seat
+    end
+    local vf = Workspace:FindFirstChild("Vehicles")
+    if vf and hum then
+        for _, car in ipairs(vf:GetChildren()) do
+            local s = car:FindFirstChildWhichIsA("VehicleSeat", true)
+            if s and s.Occupant == hum then
+                return car, s
+            end
+        end
+    end
+    -- No driver: fall back to the car you spawned
+    local mine = findMyCar()
+    if mine then
+        return mine, mine:FindFirstChildWhichIsA("VehicleSeat", true)
+    end
+    return nil, nil
+end
+
+local function getAllVehicles()
+    local res = {}
+    local vf = Workspace:FindFirstChild("Vehicles")
+    if vf then
+        for _, v in ipairs(vf:GetChildren()) do
+            if v:IsA("Model") then table.insert(res, v) end
+        end
+    end
+    for _, v in ipairs(Workspace:GetChildren()) do
+        if v:IsA("Model") and (v:FindFirstChildWhichIsA("VehicleSeat") or v.Name:lower():find("car")) then
+            if not table.find(res, v) then table.insert(res, v) end
+        end
+    end
+    return res
+end
+
+Tabs.Vehicles:Slider({
+    Title = "Car Speed",
+    Desc = "Set vehicle maximum speed",
+    Value = { Min = 10, Max = 300, Default = 45 },
+    Callback = function(val)
+        local _, seat = getLocalCar()
+        if seat then seat.MaxSpeed = val end
+    end
+})
+
+Tabs.Vehicles:Toggle({
+    Title = "Speed 3 in 1 (No Gamepass Boost)",
+    Desc = "Boosts acceleration and torque without paying for gamepass",
+    Value = false,
+    Callback = function(state)
+        YadsanXD.Toggles.CarBoost = state
+        if state then
+            YadsanXD.Connections.CarBoost = RunService.Heartbeat:Connect(function()
+                if not YadsanXD.Toggles.CarBoost then return end
+                local car, seat = getLocalCar()
+                if seat and seat.Throttle ~= 0 then
+                    seat.Torque = 999999
+                    local forward = seat.CFrame.LookVector * (seat.Throttle * 1.5)
+                    local root = car.PrimaryPart or seat
+                    root.AssemblyLinearVelocity = Vector3.new(forward.X * 85, root.AssemblyLinearVelocity.Y, forward.Z * 85)
+                end
+            end)
+        else
+            if YadsanXD.Connections.CarBoost then
+                YadsanXD.Connections.CarBoost:Disconnect()
+                YadsanXD.Connections.CarBoost = nil
+            end
+        end
+    end
+})
+
+-- ---- Vehicle Fly / Orbit / Spin (works with NO driver) ----
+do
+YadsanXD.VehicleFlySpeed = 60
+YadsanXD.VehicleOrbitRadius = 20
+YadsanXD.VehicleOrbitSpeed = 20
+YadsanXD.VehicleOrbitShape = "Circle"
+YadsanXD.CarpetSit = false
+YadsanXD.CarpetHop = true
+YadsanXD.VehicleSpinSpeed = 8
+
+local VM = { mode = nil, conn = nil, collisions = {}, toggles = {}, angle = 0 }
+
+local function setCarNoclip(car, on)
+    if on then
+        VM.collisions = {}
+        for _, p in ipairs(car:GetDescendants()) do
+            if p:IsA("BasePart") then
+                VM.collisions[p] = p.CanCollide
+                p.CanCollide = false
+            end
+        end
+    else
+        for p, v in pairs(VM.collisions) do
+            if p and p.Parent then p.CanCollide = v end
+        end
+        VM.collisions = {}
+    end
+end
+
+local function stopVehicleMode()
+    if VM.conn then VM.conn:Disconnect() VM.conn = nil end
+    for p, v in pairs(VM.collisions) do
+        if p and p.Parent then p.CanCollide = v end
+    end
+    VM.collisions = {}
+    VM.mode = nil
+end
+
+local function zeroCar(root)
+    root.AssemblyLinearVelocity = Vector3.zero
+    root.AssemblyAngularVelocity = Vector3.zero
+end
+
+local function claimCar(car)
+    -- Others only see the car move if YOU own its physics
+    pcall(function() if sethiddenproperty then sethiddenproperty(LocalPlayer, "SimulationRadius", math.huge) end end)
+    pcall(function() LocalPlayer.MaximumSimulationRadius = math.huge end)
+    local hum, hrp = getHum(), getHRP()
+    local seat = car:FindFirstChildWhichIsA("VehicleSeat", true)
+    if seat and hum and hrp and not seat.Occupant and hum.SeatPart ~= seat then
+        hrp.CFrame = seat.CFrame * CFrame.new(0, 2, 0)
+        task.wait(0.4)
+        if hum.SeatPart == seat then
+            hum.Sit = false
+            hum:ChangeState(Enum.HumanoidStateType.Jumping)
+            task.wait(0.15)
+        end
+    end
+end
+
+local function startVehicleMode(mode, step, keepCollision)
+    stopVehicleMode()
+    for name, ctrl in pairs(VM.toggles) do
+        if name ~= mode and ctrl and ctrl.Set then pcall(ctrl.Set, ctrl, false, true) end
+    end
+    local car = getLocalCar()
+    local root = getCarRoot(car)
+    if not car or not root then
+        notify("Vehicles", "No vehicle found - spawn your car first")
+        return false
+    end
+    claimCar(car)
+    VM.mode = mode
+    VM.angle = 0
+    if not keepCollision then setCarNoclip(car, true) end
+    VM.conn = RunService.Heartbeat:Connect(function(dt)
+        local c = getLocalCar()
+        local r = getCarRoot(c)
+        if not c or not r or not r.Parent then
+            stopVehicleMode()
+            return
+        end
+        pcall(function() if sethiddenproperty then sethiddenproperty(LocalPlayer, "SimulationRadius", math.huge) end end)
+        pcall(step, c, r, dt)
+    end)
+    return true
+end
+
+local function levelCFrame(cf, pos)
+    local look = cf.LookVector
+    local yaw = math.atan2(-look.X, -look.Z)
+    return CFrame.new(pos) * CFrame.Angles(0, yaw, 0)
+end
+
+VM.toggles.Fly = Tabs.Vehicles:Toggle({
+    Title = "Vehicle Fly",
+    Desc = "Fly your car - works even when nobody is driving (WASD + Space/Shift, or joystick)",
+    Value = false,
+    Callback = function(state)
+        if state then
+            local ok = startVehicleMode("Fly", function(car, root, dt)
+                local cam = Workspace.CurrentCamera
+                local dir = Vector3.zero
+                local keyed = false
+                local function down(k) return UserInputService:IsKeyDown(k) end
+                if down(Enum.KeyCode.W) then dir += cam.CFrame.LookVector keyed = true end
+                if down(Enum.KeyCode.S) then dir -= cam.CFrame.LookVector keyed = true end
+                if down(Enum.KeyCode.D) then dir += cam.CFrame.RightVector keyed = true end
+                if down(Enum.KeyCode.A) then dir -= cam.CFrame.RightVector keyed = true end
+                if down(Enum.KeyCode.Space) or down(Enum.KeyCode.E) then dir += Vector3.new(0, 1, 0) keyed = true end
+                if down(Enum.KeyCode.LeftShift) or down(Enum.KeyCode.Q) then dir -= Vector3.new(0, 1, 0) keyed = true end
+                if not keyed then
+                    local hum = getHum()
+                    if hum and hum.MoveDirection.Magnitude > 0 then
+                        local md = hum.MoveDirection
+                        local fwd = md:Dot(Vector3.new(cam.CFrame.LookVector.X, 0, cam.CFrame.LookVector.Z).Unit)
+                        local rgt = md:Dot(Vector3.new(cam.CFrame.RightVector.X, 0, cam.CFrame.RightVector.Z).Unit)
+                        dir = cam.CFrame.LookVector * fwd + cam.CFrame.RightVector * rgt
+                    end
+                end
+                local cf = car:GetPivot()
+                local pos = cf.Position
+                if dir.Magnitude > 0 then
+                    pos = pos + dir.Unit * YadsanXD.VehicleFlySpeed * dt
+                end
+                car:PivotTo(levelCFrame(cf, pos))
+                zeroCar(root)
+                -- stay on the car so the server keeps giving you its physics
+                local hrp, hum = getHRP(), getHum()
+                if hrp and hum and not hum.SeatPart then
+                    hrp.CFrame = CFrame.new(pos + Vector3.new(0, 6, 0))
+                    hrp.AssemblyLinearVelocity = Vector3.zero
+                end
+            end)
+            if not ok and VM.toggles.Fly and VM.toggles.Fly.Set then VM.toggles.Fly:Set(false, true) end
+        elseif VM.mode == "Fly" then
+            stopVehicleMode()
+        end
+    end
+})
+
+Tabs.Vehicles:Slider({
+    Title = "Vehicle Fly Speed",
+    Desc = "How fast the car flies",
+    Step = 5,
+    Value = { Min = 10, Max = 300, Default = 60 },
+    Callback = function(val) YadsanXD.VehicleFlySpeed = val end
+})
+
+-- ---- Magic Carpet tab: Vehicle Orbit with shapes ----
+local function polyPoint(verts, t)
+    local n = #verts
+    local u = (t / (math.pi * 2)) * n
+    local i = math.floor(u)
+    local f = u - i
+    local v1 = verts[i % n + 1]
+    local v2 = verts[(i + 1) % n + 1]
+    return v1 + (v2 - v1) * f
+end
+
+local function ngon(n, r)
+    local v = {}
+    for k = 0, n - 1 do
+        local a = (k / n) * math.pi * 2 - math.pi / 2
+        table.insert(v, Vector2.new(math.cos(a) * r, math.sin(a) * r))
+    end
+    return v
+end
+
+local function starVerts(r)
+    local v = {}
+    for k = 0, 9 do
+        local a = (k / 10) * math.pi * 2 - math.pi / 2
+        local rr = (k % 2 == 0) and r or r * 0.4
+        table.insert(v, Vector2.new(math.cos(a) * rr, math.sin(a) * rr))
+    end
+    return v
+end
+
+local function shapeOffset(shape, t, r)
+    if shape == "Oval" then
+        return Vector2.new(math.cos(t) * r * 1.6, math.sin(t) * r * 0.8)
+    elseif shape == "Triangle" then
+        return polyPoint(ngon(3, r * 1.2), t)
+    elseif shape == "Hexagon" then
+        return polyPoint(ngon(6, r), t)
+    elseif shape == "Rectangle" then
+        return polyPoint({
+            Vector2.new(r * 1.5, r), Vector2.new(-r * 1.5, r),
+            Vector2.new(-r * 1.5, -r), Vector2.new(r * 1.5, -r),
+        }, t)
+    elseif shape == "Star" then
+        return polyPoint(starVerts(r * 1.2), t)
+    end
+    return Vector2.new(math.cos(t) * r, math.sin(t) * r) -- Circle
+end
+
+Tabs.Carpet:Section({ Title = "Magic Carpet Orbit" })
+
+VM.toggles.Orbit = Tabs.Carpet:Toggle({
+    Title = "Vehicle Orbit",
+    Desc = "Car flies around you (or your selected target) in the chosen shape - no driver needed",
+    Value = false,
+    Callback = function(state)
+        if state then
+            local fixedCenter, lastSit, pulseT, pulsing = nil, 0, 0, false
+            local ok = startVehicleMode("Orbit", function(car, root, dt)
+                local targetHRP = YadsanXD.TargetPlayer and getHRP(YadsanXD.TargetPlayer)
+                local myHRP = getHRP()
+                if not targetHRP and not myHRP then return end
+                local sitting = YadsanXD.CarpetSit
+                if sitting and not targetHRP and not fixedCenter then fixedCenter = myHRP.Position end
+                local step = dt * (YadsanXD.VehicleOrbitSpeed / 10)
+                VM.angle = (VM.angle + step) % (math.pi * 2)
+                local r = YadsanXD.VehicleOrbitRadius
+                local shape = YadsanXD.VehicleOrbitShape
+                local o1 = shapeOffset(shape, VM.angle, r)
+                local o2 = shapeOffset(shape, (VM.angle + 0.05) % (math.pi * 2), r)
+                -- follows you (or your target) - nobody has to drive or ride it
+                local base = targetHRP and targetHRP.Position
+                    or (sitting and fixedCenter) or myHRP.Position
+                local center = base + Vector3.new(0, 3, 0)
+                local pos = center + Vector3.new(o1.X, 0, o1.Y)
+                local ahead = center + Vector3.new(o2.X, 0, o2.Y)
+                if (ahead - pos).Magnitude < 0.01 then ahead = pos + Vector3.new(0, 0, 1) end
+                car:PivotTo(CFrame.lookAt(pos, ahead))
+                zeroCar(root)
+                -- being in the driver seat is what makes the server hand you the car's
+                -- physics, so other players see it move
+                if not sitting and not pulsing and YadsanXD.CarpetHop then
+                    -- nobody-driving mode: hop in and out of the seat every few seconds
+                    -- so the server keeps giving you the car's physics
+                    pulseT += dt
+                    if pulseT > 2.5 then
+                        pulseT = 0
+                        pulsing = true
+                        task.spawn(function()
+                            local hum, hrp = getHum(), getHRP()
+                            local seat = car:FindFirstChildWhichIsA("VehicleSeat", true)
+                            if seat and hum and hrp and hum.SeatPart ~= seat then
+                                local back = hrp.CFrame
+                                hrp.CFrame = seat.CFrame * CFrame.new(0, 1.5, 0)
+                                task.wait(0.2)
+                                if hum.SeatPart == seat then
+                                    hum.Sit = false
+                                    hum:ChangeState(Enum.HumanoidStateType.Jumping)
+                                end
+                                task.wait(0.05)
+                                hrp.CFrame = back
+                            end
+                            pulsing = false
+                        end)
+                    end
+                end
+                if sitting then
+                    local hum = getHum()
+                    local seat = car:FindFirstChildWhichIsA("VehicleSeat", true)
+                    lastSit += dt
+                    if seat and hum and myHRP and hum.SeatPart ~= seat and lastSit > 0.25 then
+                        lastSit = 0
+                        myHRP.CFrame = seat.CFrame * CFrame.new(0, 1.5, 0)
+                    end
+                end
+            end)
+            if not ok and VM.toggles.Orbit and VM.toggles.Orbit.Set then VM.toggles.Orbit:Set(false, true) end
+        elseif VM.mode == "Orbit" then
+            stopVehicleMode()
+        end
+    end
+})
+
+Tabs.Carpet:Toggle({
+    Title = "Sit in Carpet (lets friends see it)",
+    Desc = "ON: you sit in the driver seat (best for friends to see it). OFF: nobody sits; works best with a small radius",
+    Value = false,
+    Callback = function(state) YadsanXD.CarpetSit = state end
+})
+
+Tabs.Carpet:Toggle({
+    Title = "Ownership Hop (helps friends see it)",
+    Desc = "Quick seat hop every few seconds while nobody drives. Turn OFF for zero sitting",
+    Value = true,
+    Callback = function(state) YadsanXD.CarpetHop = state end
+})
+
+Tabs.Carpet:Dropdown({
+    Title = "Orbit Shape",
+    Values = { "Circle", "Oval", "Star", "Hexagon", "Rectangle", "Triangle" },
+    Value = "Circle",
+    Callback = function(val)
+        if typeof(val) == "table" then val = val[1] end
+        YadsanXD.VehicleOrbitShape = val or "Circle"
+    end
+})
+
+Tabs.Carpet:Slider({
+    Title = "Vehicle Orbit Radius",
+    Desc = "Size of the shape (5 to 150)",
+    Step = 1,
+    Value = { Min = 5, Max = 150, Default = 20 },
+    Callback = function(val) YadsanXD.VehicleOrbitRadius = val end
+})
+
+Tabs.Carpet:Slider({
+    Title = "Vehicle Orbit Speed",
+    Desc = "How fast the car travels the shape (10 to 150)",
+    Step = 5,
+    Value = { Min = 10, Max = 150, Default = 20 },
+    Callback = function(val) YadsanXD.VehicleOrbitSpeed = val end
+})
+
+VM.toggles.Spin = Tabs.Vehicles:Toggle({
+    Title = "Vehicle Spin",
+    Desc = "Spins your car in place - no driver needed",
+    Value = false,
+    Callback = function(state)
+        if state then
+            local ok = startVehicleMode("Spin", function(car, root, dt)
+                car:PivotTo(car:GetPivot() * CFrame.Angles(0, dt * YadsanXD.VehicleSpinSpeed, 0))
+                zeroCar(root)
+            end)
+            if not ok and VM.toggles.Spin and VM.toggles.Spin.Set then VM.toggles.Spin:Set(false, true) end
+        elseif VM.mode == "Spin" then
+            stopVehicleMode()
+        end
+    end
+})
+
+Tabs.Vehicles:Slider({
+    Title = "Vehicle Spin Speed",
+    Desc = "How fast the car spins",
+    Step = 1,
+    Value = { Min = 1, Max = 40, Default = 8 },
+    Callback = function(val) YadsanXD.VehicleSpinSpeed = val end
+})
+
+YadsanXD.VehicleFlingPower = 2000
+
+VM.toggles.Target = Tabs.Vehicles:Toggle({
+    Title = "Vehicle Target",
+    Desc = "Car drives to and stays right behind your selected target player",
+    Value = false,
+    Callback = function(state)
+        if state then
+            if not YadsanXD.TargetPlayer then
+                notify("Vehicles", "Select a target player first (Target tab)")
+                if VM.toggles.Target and VM.toggles.Target.Set then VM.toggles.Target:Set(false, true) end
+                return
+            end
+            local ok = startVehicleMode("Target", function(car, root, dt)
+                local thrp = YadsanXD.TargetPlayer and getHRP(YadsanXD.TargetPlayer)
+                if not thrp then return end
+                local pos = thrp.Position - thrp.CFrame.LookVector * 10 + Vector3.new(0, 2, 0)
+                local face = Vector3.new(thrp.Position.X, pos.Y, thrp.Position.Z)
+                car:PivotTo(CFrame.lookAt(pos, face))
+                zeroCar(root)
+            end)
+            if not ok and VM.toggles.Target and VM.toggles.Target.Set then VM.toggles.Target:Set(false, true) end
+        elseif VM.mode == "Target" then
+            stopVehicleMode()
+        end
+    end
+})
+
+VM.toggles.Fling = Tabs.Vehicles:Toggle({
+    Title = "Vehicle Fling",
+    Desc = "Rams your selected target with a spinning car to fling them",
+    Value = false,
+    Callback = function(state)
+        if state then
+            if not YadsanXD.TargetPlayer then
+                notify("Vehicles", "Select a target player first (Target tab)")
+                if VM.toggles.Fling and VM.toggles.Fling.Set then VM.toggles.Fling:Set(false, true) end
+                return
+            end
+            local ok = startVehicleMode("Fling", function(car, root, dt)
+                local thrp = YadsanXD.TargetPlayer and getHRP(YadsanXD.TargetPlayer)
+                if not thrp then return end
+                local p = YadsanXD.VehicleFlingPower
+                car:PivotTo(CFrame.new(thrp.Position + Vector3.new(math.random(-1, 1), 0, math.random(-1, 1))))
+                root.AssemblyAngularVelocity = Vector3.new(p, p, p)
+                root.AssemblyLinearVelocity = Vector3.new(math.random(-1, 1) * p, p * 0.5, math.random(-1, 1) * p)
+            end, true)
+            if not ok and VM.toggles.Fling and VM.toggles.Fling.Set then VM.toggles.Fling:Set(false, true) end
+        elseif VM.mode == "Fling" then
+            stopVehicleMode()
+        end
+    end
+})
+
+Tabs.Vehicles:Slider({
+    Title = "Vehicle Fling Power",
+    Desc = "Spin and impact strength of the fling",
+    Step = 100,
+    Value = { Min = 500, Max = 20000, Default = 2000 },
+    Callback = function(val) YadsanXD.VehicleFlingPower = val end
+})
+
+VM.toggles.Heli = Tabs.Vehicles:Toggle({
+    Title = "Vehicle Helicopter Fling All",
+    Desc = "Car spins like a helicopter rotor and flings every player one by one (on/off)",
+    Value = false,
+    Callback = function(state)
+        if state then
+            local idx, timer = 1, 0
+            local ok = startVehicleMode("Heli", function(car, root, dt)
+                timer += dt
+                local list = {}
+                for _, plr in ipairs(Players:GetPlayers()) do
+                    if plr ~= LocalPlayer and getHRP(plr) then table.insert(list, plr) end
+                end
+                if #list == 0 then return end
+                if timer > 0.35 then
+                    timer = 0
+                    idx = idx % #list + 1
+                end
+                local thrp = getHRP(list[math.min(idx, #list)])
+                if not thrp then return end
+                local p = YadsanXD.VehicleFlingPower
+                car:PivotTo(CFrame.new(thrp.Position + Vector3.new(0, 1, 0)))
+                root.AssemblyAngularVelocity = Vector3.new(0, p * 2, 0)
+                root.AssemblyLinearVelocity = Vector3.new(math.random(-1, 1) * p * 0.5, p * 0.25, math.random(-1, 1) * p * 0.5)
+            end, true)
+            if not ok and VM.toggles.Heli and VM.toggles.Heli.Set then VM.toggles.Heli:Set(false, true) end
+        elseif VM.mode == "Heli" then
+            stopVehicleMode()
+        end
+    end
+})
+
+YadsanXD.StopVehicle = stopVehicleMode
+end
+
+Tabs.Vehicles:Toggle({
+    Title = "Auto Unflip",
+    Desc = "Automatically flips vehicle right-side up if inverted",
+    Value = false,
+    Callback = function(state)
+        YadsanXD.Toggles.AutoRight = state
+        if state then
+            YadsanXD.Connections.AutoRight = RunService.Heartbeat:Connect(function()
+                if not YadsanXD.Toggles.AutoRight then return end
+                local car, seat = getLocalCar()
+                local root = car and (car.PrimaryPart or seat)
+                if root and root.CFrame.UpVector.Y < 0.2 then
+                    root.CFrame = CFrame.new(root.Position + Vector3.new(0, 3, 0)) * CFrame.Angles(0, math.rad(root.Orientation.Y), 0)
+                    root.AssemblyAngularVelocity = Vector3.zero
+                end
+            end)
+        else
+            if YadsanXD.Connections.AutoRight then
+                YadsanXD.Connections.AutoRight:Disconnect()
+                YadsanXD.Connections.AutoRight = nil
+            end
+        end
+    end
+})
+
+Tabs.Vehicles:Section({ Title = "Car Lighting & Colors" })
+
+Tabs.Vehicles:Toggle({
+    Title = "Hazard Lights",
+    Desc = "Turns on car hazard lights",
+    Value = false,
+    Callback = function()
+        if Remotes.Car then Remotes.Car:FireServer("HazardLights") end
+    end
+})
+
+Tabs.Vehicles:Toggle({
+    Title = "Headlights",
+    Desc = "Turns on car headlights",
+    Value = false,
+    Callback = function()
+        if Remotes.Car then Remotes.Car:FireServer("Headlights") end
+    end
+})
+
+Tabs.Vehicles:Toggle({
+    Title = "Rainbow Car Color",
+    Desc = "Continuously cycles your car color through the rainbow",
+    Value = false,
+    Callback = function(state)
+        YadsanXD.Toggles.ChromaCar = state
+        if state then
+            task.spawn(function()
+                local hue = 0
+                while YadsanXD.Toggles.ChromaCar do
+                    hue = (hue + 0.03) % 1
+                    if Remotes.Car then
+                        Remotes.Car:FireServer("CarColor", Color3.fromHSV(hue, 1, 1))
+                    end
+                    task.wait(0.2)
+                end
+            end)
+        end
+    end
+})
+
+Tabs.Vehicles:Section({ Title = "World Vehicle Controls" })
+
+Tabs.Vehicles:Button({
+    Title = "Teleport All Cars to Me",
+    Desc = "Brings every empty car to you - visible to everyone",
+    Callback = function()
+        local hrp = getHRP()
+        if not hrp then return end
+        -- Others only see it if you own the car's physics, so grab range first
+        pcall(function() if sethiddenproperty then sethiddenproperty(LocalPlayer, "SimulationRadius", math.huge) end end)
+        pcall(function() LocalPlayer.MaximumSimulationRadius = math.huge end)
+        local cars = {}
+        for _, model in ipairs(getAllVehicles()) do
+            local root = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart", true)
+            local seat = model:FindFirstChildWhichIsA("VehicleSeat", true)
+            -- skip cars someone is driving (their owner controls those)
+            if root and not root.Anchored and not (seat and seat.Occupant) then
+                table.insert(cars, { model = model, root = root })
+            end
+        end
+        local n = #cars
+        if n == 0 then
+            notify("Vehicles", "No empty cars found")
+            return
+        end
+        local t = 0
+        local conn
+        conn = RunService.Heartbeat:Connect(function(dt)
+            t += dt
+            local me = getHRP()
+            if not me or t > 2.5 then
+                conn:Disconnect()
+                return
+            end
+            for i, c in ipairs(cars) do
+                if c.model.Parent then
+                    local ang = (i / n) * math.pi * 2
+                    local ring = 14 + math.floor((i - 1) / 12) * 12
+                    local pos = me.Position + Vector3.new(math.cos(ang) * ring, 3, math.sin(ang) * ring)
+                    pcall(function()
+                        c.model:PivotTo(CFrame.new(pos) * CFrame.Angles(0, ang, 0))
+                        c.root.AssemblyLinearVelocity = Vector3.zero
+                        c.root.AssemblyAngularVelocity = Vector3.zero
+                    end)
+                end
+            end
+        end)
+        notify("Vehicles", "Teleported " .. n .. " cars to you")
+    end
+})
+
+Tabs.Vehicles:Button({
+    Title = "Fling All Cars",
+    Desc = "Flings all unanchored vehicles into the sky",
+    Callback = function()
+        for _, model in ipairs(getAllVehicles()) do
+            local root = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
+            if root and not root.Anchored then
+                root.AssemblyLinearVelocity = Vector3.new(math.random(-300, 300), 400, math.random(-300, 300))
+                root.AssemblyAngularVelocity = Vector3.new(300, 300, 300)
+            end
+        end
+        notify("Vehicles", "Flung all vehicles")
+    end
+})
+
+-- =========================================================================
+-- TAB 6: TARGET & TROLL
+-- =========================================================================
+Tabs.Target:Section({ Title = "Select Target Player" })
+
+local PlayerDropdown = Tabs.Target:Dropdown({
+    Title = "Player List",
+    Values = getPlayerList(),
+    Value = "None",
+    Callback = function(selected)
+        YadsanXD.TargetPlayer = getPlayerByName(selected)
+    end
+})
+
+local function refreshPlayerListDropdown()
+    pcall(function()
+        local list = getPlayerList()
+        local current = YadsanXD.TargetPlayer and YadsanXD.TargetPlayer.Name or "None"
+        if not table.find(list, current) then current = "None" end
+        PlayerDropdown:Refresh(list, current)
+    end)
+end
+
+Players.PlayerAdded:Connect(function()
+    task.wait(0.5)
+    refreshPlayerListDropdown()
+end)
+
+Players.PlayerRemoving:Connect(function(p)
+    if YadsanXD.TargetPlayer == p then YadsanXD.TargetPlayer = nil end
+    task.wait(0.5)
+    refreshPlayerListDropdown()
+end)
+
+Tabs.Target:Button({
+    Title = "Refresh Player List",
+    Desc = "Updates dropdown with players in the server",
+    Callback = function()
+        refreshPlayerListDropdown()
+        notify("Players", "Player list refreshed")
+    end
+})
+
+Tabs.Target:Button({
+    Title = "Goto Player",
+    Desc = "Teleports you directly behind the target player",
+    Callback = function()
+        if not YadsanXD.TargetPlayer then notify("Target", "Select a target first") return end
+        local tHRP = getHRP(YadsanXD.TargetPlayer)
+        if tHRP then
+            teleportTo(tHRP.CFrame * CFrame.new(0, 0, 3))
+            notify("Target", "Teleported to " .. YadsanXD.TargetPlayer.Name)
+        end
+    end
+})
+
+Tabs.Target:Toggle({
+    Title = "Spectate Player",
+    Desc = "Views the target player's camera perspective",
+    Value = false,
+    Callback = function(state)
+        if state then
+            if not YadsanXD.TargetPlayer then notify("Target", "Select a target first") return end
+            local hum = getHum(YadsanXD.TargetPlayer)
+            if hum then Camera.CameraSubject = hum end
+        else
+            local hum = getHum()
+            if hum then Camera.CameraSubject = hum end
+        end
+    end
+})
+
+Tabs.Target:Section({ Title = "Orbit Player" })
+
+Tabs.Target:Slider({
+    Title = "Orbit Radius",
+    Desc = "Distance around target player",
+    Step = 1,
+    Value = { Min = 3, Max = 30, Default = 6 },
+    Callback = function(val)
+        YadsanXD.OrbitRadius = val
+    end
+})
+
+Tabs.Target:Slider({
+    Title = "Orbit Speed",
+    Desc = "Rotational speed around target player",
+    Step = 1,
+    Value = { Min = 1, Max = 15, Default = 4 },
+    Callback = function(val)
+        YadsanXD.OrbitSpeed = val
+    end
+})
+
+Tabs.Target:Toggle({
+    Title = "Orbit Target",
+    Desc = "Spins around target player continuously",
+    Value = false,
+    Callback = function(state)
+        YadsanXD.Toggles.Orbit = state
+        if state then
+            if not YadsanXD.TargetPlayer then notify("Target", "Select a target first") return end
+            YadsanXD.Connections.Orbit = RunService.RenderStepped:Connect(function(dt)
+                if not YadsanXD.Toggles.Orbit or not YadsanXD.TargetPlayer then return end
+                local tHRP = getHRP(YadsanXD.TargetPlayer)
+                local myHRP = getHRP()
+                if tHRP and myHRP then
+                    YadsanXD.OrbitAngle = (YadsanXD.OrbitAngle + dt * YadsanXD.OrbitSpeed) % (math.pi * 2)
+                    local offset = Vector3.new(math.cos(YadsanXD.OrbitAngle) * YadsanXD.OrbitRadius, 1, math.sin(YadsanXD.OrbitAngle) * YadsanXD.OrbitRadius)
+                    myHRP.CFrame = CFrame.new(tHRP.Position + offset, tHRP.Position)
+                end
+            end)
+        else
+            if YadsanXD.Connections.Orbit then
+                YadsanXD.Connections.Orbit:Disconnect()
+                YadsanXD.Connections.Orbit = nil
+            end
+        end
+    end
+})
+
+Tabs.Target:Section({ Title = "Rocket Launcher Spammer" })
+
+YadsanXD.RocketDelay = 0.3
+YadsanXD.RocketSpam = false
+
+local function allMyTools()
+    local res = {}
+    local char = getChar()
+    if char then
+        for _, t in ipairs(char:GetChildren()) do if t:IsA("Tool") then table.insert(res, t) end end
+    end
+    local bp = LocalPlayer:FindFirstChild("Backpack")
+    if bp then
+        for _, t in ipairs(bp:GetChildren()) do if t:IsA("Tool") then table.insert(res, t) end end
+    end
+    return res
+end
+
+local function looksLikeRocket(t)
+    local n = t.Name:lower()
+    return n:find("rocket") or n:find("launcher") or n:find("rpg") or n:find("bazooka")
+        or n:find("32356064") or n:find("missile")
+end
+
+local function findRocketTool()
+    if YadsanXD.RocketTool and YadsanXD.RocketTool.Parent
+        and (YadsanXD.RocketTool:IsDescendantOf(LocalPlayer) or YadsanXD.RocketTool:IsDescendantOf(getChar() or game)) then
+        return YadsanXD.RocketTool
+    end
+    for _, t in ipairs(allMyTools()) do
+        if looksLikeRocket(t) then
+            YadsanXD.RocketTool = t
+            return t
+        end
+    end
+    return nil
+end
+
+Tabs.Target:Toggle({
+    Title = "Rocket Launcher Auto Spammer",
+    Desc = "Spams rockets at your selected target, or at every player in turn if none is selected",
+    Value = false,
+    Callback = function(state)
+        YadsanXD.RocketSpam = state
+        if not state then return end
+        task.spawn(function()
+            if not findRocketTool() then
+                -- remember what you already hold, then pick up the launcher
+                local before = {}
+                for _, t in ipairs(allMyTools()) do before[t] = true end
+                equipToolByName("32356064")
+                local t0 = tick()
+                while not findRocketTool() and tick() - t0 < 4 do
+                    -- name may differ: accept the first brand-new tool
+                    for _, t in ipairs(allMyTools()) do
+                        if not before[t] then YadsanXD.RocketTool = t end
+                    end
+                    if YadsanXD.RocketTool then break end
+                    task.wait(0.1)
+                end
+            end
+            if not findRocketTool() then
+                notify("Rocket Spammer", "Could not get the Rocket Launcher")
+                YadsanXD.RocketSpam = false
+                return
+            end
+            local idx = 1
+            while YadsanXD.RocketSpam do
+                pcall(function()
+                local tool = findRocketTool()
+                local hum = getHum()
+                if tool and hum then
+                    if tool.Parent ~= getChar() then
+                        pcall(function() hum:EquipTool(tool) end)
+                        task.wait(0.2)
+                    end
+                    -- pick victim: selected target, otherwise cycle through everyone
+                    local victim = YadsanXD.TargetPlayer
+                    if not victim then
+                        local list = {}
+                        for _, plr in ipairs(Players:GetPlayers()) do
+                            if plr ~= LocalPlayer and getHRP(plr) then table.insert(list, plr) end
+                        end
+                        if #list > 0 then
+                            idx = idx % #list + 1
+                            victim = list[idx]
+                        end
+                    end
+                    local thrp = victim and getHRP(victim)
+                    local me = getHRP()
+                    if thrp and me then
+                        local cam = Workspace.CurrentCamera
+                        cam.CFrame = CFrame.lookAt(cam.CFrame.Position, thrp.Position)
+                        me.CFrame = CFrame.lookAt(me.Position, Vector3.new(thrp.Position.X, me.Position.Y, thrp.Position.Z))
+                        -- put the cursor on the target so Mouse.Hit points at them
+                        local v2, onScreen = cam:WorldToViewportPoint(thrp.Position)
+                        if onScreen and mousemoveabs then
+                            pcall(mousemoveabs, v2.X, v2.Y)
+                        end
+                        pcall(function() tool:Activate() end)
+                    end
+                end
+                end)
+                task.wait(YadsanXD.RocketDelay)
+            end
+        end)
+    end
+})
+
+Tabs.Target:Slider({
+    Title = "Rocket Delay",
+    Desc = "Seconds between rockets (lower = faster)",
+    Step = 0.05,
+    Value = { Min = 0.05, Max = 2, Default = 0.3 },
+    Callback = function(val) YadsanXD.RocketDelay = val end
+})
+
+Tabs.Target:Section({ Title = "Troll Features" })
+
+Tabs.Target:Button({
+    Title = "Bring By Couch",
+    Desc = "Spawns a couch beneath the target player to pull them",
+    Callback = function()
+        if not YadsanXD.TargetPlayer then notify("Target", "Select a target first") return end
+        local tHRP = getHRP(YadsanXD.TargetPlayer)
+        local myHRP = getHRP()
+        if tHRP and myHRP and Remotes.Props then
+            Remotes.Props:FireServer("Couch", tHRP.CFrame * CFrame.new(0, -1, 0))
+            task.wait(0.3)
+            Remotes.Props:FireServer("Couch", myHRP.CFrame * CFrame.new(0, 0, -4))
+            notify("Troll", "Brought " .. YadsanXD.TargetPlayer.Name)
+        end
+    end
+})
+
+Tabs.Target:Button({
+    Title = "Kill / Void By Couch",
+    Desc = "Pulls target onto couch and drops into the void",
+    Callback = function()
+        if not YadsanXD.TargetPlayer then notify("Target", "Select a target first") return end
+        local tHRP = getHRP(YadsanXD.TargetPlayer)
+        if tHRP and Remotes.Props then
+            Remotes.Props:FireServer("Couch", tHRP.CFrame * CFrame.new(0, -1, 0))
+            task.wait(0.3)
+            Remotes.Props:FireServer("Couch", CFrame.new(0, -450, 0))
+            notify("Troll", "Voided " .. YadsanXD.TargetPlayer.Name)
+        end
+    end
+})
+
+Tabs.Target:Button({
+    Title = "Kill By Car",
+    Desc = "Teleports vehicle directly into target player",
+    Callback = function()
+        if not YadsanXD.TargetPlayer then notify("Target", "Select a target first") return end
+        local tHRP = getHRP(YadsanXD.TargetPlayer)
+        local car, seat = getLocalCar()
+        local root = car and (car.PrimaryPart or seat)
+        if root and tHRP then
+            root.CFrame = tHRP.CFrame * CFrame.new(0, 1, -2)
+            root.AssemblyLinearVelocity = tHRP.CFrame.LookVector * 150
+            notify("Troll", "Crushed " .. YadsanXD.TargetPlayer.Name)
+        else
+            notify("Troll", "Spawn and sit in a car first")
+        end
+    end
+})
+
+Tabs.Target:Button({
+    Title = "Fling Target Player",
+    Desc = "Spins into the target player at high velocity",
+    Callback = function()
+        if not YadsanXD.TargetPlayer then notify("Target", "Select a target first") return end
+        local tHRP = getHRP(YadsanXD.TargetPlayer)
+        local myHRP = getHRP()
+        if tHRP and myHRP then
+            task.spawn(function()
+                local bv = Instance.new("BodyAngularVelocity")
+                bv.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
+                bv.AngularVelocity = Vector3.new(0, 99999, 0)
+                bv.Parent = myHRP
+                for i = 1, 20 do
+                    if not tHRP.Parent then break end
+                    myHRP.CFrame = tHRP.CFrame * CFrame.new(math.random(-2, 2), 0, math.random(-2, 2))
+                    task.wait(0.05)
+                end
+                bv:Destroy()
+            end)
+            notify("Troll", "Flung " .. YadsanXD.TargetPlayer.Name)
+        end
+    end
+})
+
+-- =========================================================================
+-- TAB 8: HOUSE
+-- =========================================================================
+Tabs.House:Section({ Title = "House Security" })
+
+Tabs.House:Button({
+    Title = "Lock House (Ban All)",
+    Desc = "Bans all other players from your house property",
+    Callback = function()
+        if Remotes.PlayersHouse then
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer then
+                    Remotes.PlayersHouse:FireServer("BanPlayerFromHouse", p)
+                end
+            end
+            notify("House", "Banned all players from house")
+        end
+    end
+})
+
+Tabs.House:Button({
+    Title = "Unlock House (Unban All)",
+    Desc = "Unbans all players from your house property",
+    Callback = function()
+        if Remotes.PlayersHouse then
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer then
+                    Remotes.PlayersHouse:FireServer("UnBanPlayerFromHouse", p)
+                end
+            end
+            notify("House", "Unbanned all players from house")
+        end
+    end
+})
+
+Tabs.House:Toggle({
+    Title = "Bypass House Barriers",
+    Desc = "Walk freely through locked house ban barriers",
+    Value = false,
+    Callback = function(state)
+        YadsanXD.Toggles.BypassBarriers = state
+        if state then
+            YadsanXD.Connections.Bypass = RunService.Stepped:Connect(function()
+                if not YadsanXD.Toggles.BypassBarriers then return end
+                local lots = Workspace:FindFirstChild("001_Lots")
+                if lots then
+                    for _, l in ipairs(lots:GetChildren()) do
+                        for _, obj in ipairs(l:GetDescendants()) do
+                            if obj:IsA("BasePart") and (obj.Name == "Barrier" or obj.Name:find("HouseBarrier") or obj.Name:find("BannedPlayers")) then
+                                obj.CanCollide = false
+                            end
+                        end
+                    end
+                end
+            end)
+        else
+            if YadsanXD.Connections.Bypass then
+                YadsanXD.Connections.Bypass:Disconnect()
+                YadsanXD.Connections.Bypass = nil
+            end
+        end
+    end
+})
+
+Tabs.House:Section({ Title = "House Teleports" })
+
+Tabs.House:Slider({
+    Title = "House Lot Number",
+    Desc = "Pick house lot number (1 - 35)",
+    Step = 1,
+    Value = { Min = 1, Max = 35, Default = 1 },
+    Callback = function(val)
+        YadsanXD.SelectedHouseLot = val
+    end
+})
+
+Tabs.House:Button({
+    Title = "Teleport to House Lot",
+    Desc = "Warps directly to the selected residential plot",
+    Callback = function()
+        local lots = Workspace:FindFirstChild("001_Lots")
+        local children = lots and lots:GetChildren()
+        local lot = children and children[YadsanXD.SelectedHouseLot]
+        if lot then
+            local part = lot.PrimaryPart or lot:FindFirstChildWhichIsA("BasePart", true)
+            if part then
+                teleportTo(part.CFrame * CFrame.new(0, 5, 0))
+                notify("House", "Teleported to Lot " .. YadsanXD.SelectedHouseLot .. " (" .. lot.Name .. ")")
+                return
+            end
+        end
+        teleportTo(Vector3.new(-33 + (YadsanXD.SelectedHouseLot * 15), 4, -30))
+        notify("House", "Teleported near Lot " .. YadsanXD.SelectedHouseLot)
+    end
+})
+
+-- =========================================================================
+-- TAB 9: VISUALS & ESP
+-- =========================================================================
+Tabs.Visuals:Section({ Title = "Player ESP" })
+
+local function createChams(player)
+    if player == LocalPlayer or not player.Character then return end
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "YadsanXD_Chams"
+    highlight.FillColor = Color3.fromRGB(0, 255, 170)
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.FillTransparency = 0.4
+    highlight.OutlineTransparency = 0.1
+    highlight.Adornee = player.Character
+    highlight.Parent = player.Character
+    table.insert(YadsanXD.ESPObjects, highlight)
+end
+
+local function createBillboard(player)
+    if player == LocalPlayer or not player.Character then return end
+    local head = player.Character:FindFirstChild("Head")
+    if not head or head:FindFirstChild("YadsanXD_ESP") then return end
+
+    local bb = Instance.new("BillboardGui")
+    bb.Name = "YadsanXD_ESP"
+    bb.Adornee = head
+    bb.Size = UDim2.new(0, 160, 0, 40)
+    bb.StudsOffset = Vector3.new(0, 2.5, 0)
+    bb.AlwaysOnTop = true
+
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Size = UDim2.new(1, 0, 0.5, 0)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    nameLabel.TextStrokeTransparency = 0.2
+    nameLabel.TextSize = 13
+    nameLabel.Font = Enum.Font.GothamBold
+    nameLabel.Text = player.Name
+    nameLabel.Parent = bb
+
+    local distLabel = Instance.new("TextLabel")
+    distLabel.Size = UDim2.new(1, 0, 0.5, 0)
+    distLabel.Position = UDim2.new(0, 0, 0.5, 0)
+    distLabel.BackgroundTransparency = 1
+    distLabel.TextColor3 = Color3.fromRGB(0, 255, 160)
+    distLabel.TextStrokeTransparency = 0.2
+    distLabel.TextSize = 11
+    distLabel.Font = Enum.Font.Gotham
+    distLabel.Text = "Dist: ... | HP: 100%"
+    distLabel.Parent = bb
+
+    bb.Parent = head
+    table.insert(YadsanXD.ESPObjects, bb)
+
+    task.spawn(function()
+        while bb and bb.Parent do
+            local myHRP = getHRP()
+            local tHRP = getHRP(player)
+            local hum = getHum(player)
+            if myHRP and tHRP then
+                local dist = math.floor((myHRP.Position - tHRP.Position).Magnitude)
+                local hp = hum and math.floor((hum.Health / math.max(hum.MaxHealth, 1)) * 100) or 100
+                distLabel.Text = string.format("%d studs  |  HP %d%%", dist, hp)
+            end
+            task.wait(0.25)
+        end
+    end)
+end
+
+Tabs.Visuals:Toggle({
+    Title = "Player Box ESP (Chams)",
+    Desc = "Highlights player characters through walls",
+    Value = false,
+    Callback = function(state)
+        YadsanXD.Toggles.Chams = state
+        if state then
+            for _, p in ipairs(Players:GetPlayers()) do createChams(p) end
+            YadsanXD.Connections.ChamsAdded = Players.PlayerAdded:Connect(function(p)
+                p.CharacterAdded:Connect(function()
+                    task.wait(1)
+                    if YadsanXD.Toggles.Chams then createChams(p) end
+                end)
+            end)
+        else
+            if YadsanXD.Connections.ChamsAdded then
+                YadsanXD.Connections.ChamsAdded:Disconnect()
+                YadsanXD.Connections.ChamsAdded = nil
+            end
+            for _, obj in ipairs(YadsanXD.ESPObjects) do
+                if obj and obj:IsA("Highlight") then obj:Destroy() end
+            end
+        end
+    end
+})
+
+Tabs.Visuals:Toggle({
+    Title = "Name & Distance ESP",
+    Desc = "Displays name, distance, and health above players",
+    Value = false,
+    Callback = function(state)
+        YadsanXD.Toggles.DistanceESP = state
+        if state then
+            for _, p in ipairs(Players:GetPlayers()) do createBillboard(p) end
+            YadsanXD.Connections.ESPAdded = Players.PlayerAdded:Connect(function(p)
+                p.CharacterAdded:Connect(function()
+                    task.wait(1)
+                    if YadsanXD.Toggles.DistanceESP then createBillboard(p) end
+                end)
+            end)
+        else
+            if YadsanXD.Connections.ESPAdded then
+                YadsanXD.Connections.ESPAdded:Disconnect()
+                YadsanXD.Connections.ESPAdded = nil
+            end
+            for _, obj in ipairs(YadsanXD.ESPObjects) do
+                if obj and obj:IsA("BillboardGui") then obj:Destroy() end
+            end
+        end
+    end
+})
+
+Tabs.Visuals:Section({ Title = "Character Effects" })
+
+local flameColors = { "White", "Orange", "Green", "Blue", "Purple", "Dark" }
+Tabs.Visuals:Dropdown({
+    Title = "Flame Aura Color",
+    Values = flameColors,
+    Value = YadsanXD.SelectedFireColor,
+    Callback = function(val)
+        YadsanXD.SelectedFireColor = val
+    end
+})
+
+Tabs.Visuals:Toggle({
+    Title = "Flame Aura",
+    Desc = "Surrounds your character with custom fire effects",
+    Value = false,
+    Callback = function(state)
+        YadsanXD.Toggles.FireAura = state
+        local hrp = getHRP()
+        if not hrp then return end
+        if state then
+            local fire = Instance.new("Fire")
+            fire.Name = "YadsanXD_FireAura"
+            local pal = FLAME_PALETTES[YadsanXD.SelectedFireColor] or FLAME_PALETTES.White
+            fire.Color = pal.Color
+            fire.SecondaryColor = pal.Secondary
+            fire.Size = 6
+            fire.Heat = 9
+            fire.Parent = hrp
+            table.insert(YadsanXD.ActiveObjects, fire)
+        else
+            local fire = hrp:FindFirstChild("YadsanXD_FireAura")
+            if fire then fire:Destroy() end
+        end
+    end
+})
+
+Tabs.Visuals:Toggle({
+    Title = "Halo Effect",
+    Desc = "Attaches a glowing halo above your character",
+    Value = false,
+    Callback = function(state)
+        local head = getChar() and getChar():FindFirstChild("Head")
+        if not head then return end
+        if state then
+            local ring = Instance.new("Part")
+            ring.Name = "YadsanXD_Halo"
+            ring.Shape = Enum.PartType.Cylinder
+            ring.Size = Vector3.new(0.2, 3, 3)
+            ring.Material = Enum.Material.Neon
+            ring.Color = Color3.fromRGB(0, 255, 200)
+            ring.CanCollide = false
+            ring.CFrame = head.CFrame * CFrame.new(0, 1.8, 0) * CFrame.Angles(0, 0, math.rad(90))
+            local weld = Instance.new("WeldConstraint")
+            weld.Part0 = head
+            weld.Part1 = ring
+            weld.Parent = ring
+            ring.Parent = head
+            table.insert(YadsanXD.ActiveObjects, ring)
+        else
+            local ring = head:FindFirstChild("YadsanXD_Halo")
+            if ring then ring:Destroy() end
+        end
+    end
+})
+
+-- =========================================================================
+-- TAB 10: OUTFITS
+-- =========================================================================
+Tabs.Outfits:Section({ Title = "Outfit Stealer" })
+
+Tabs.Outfits:Button({
+    Title = "Copy Target Outfit",
+    Desc = "Copies clothes and accessories from selected player",
+    Callback = function()
+        if not YadsanXD.TargetPlayer then notify("Outfits", "Select a target player first") return end
+        local tChar = getChar(YadsanXD.TargetPlayer)
+        local myChar = getChar()
+        if tChar and myChar then
+            local humDesc = tChar:FindFirstChildOfClass("Humanoid") and tChar.Humanoid:GetAppliedDescription()
+            if humDesc and myChar:FindFirstChildOfClass("Humanoid") then
+                myChar.Humanoid:ApplyDescription(humDesc)
+                notify("Outfits", "Copied outfit from " .. YadsanXD.TargetPlayer.Name)
+            end
+        end
+    end
+})
+
+-- =========================================================================
+-- TAB 11: MUSIC
+-- =========================================================================
+Tabs.Music:Section({ Title = "Boombox" })
+
+local customSoundId = "1843559048"
+Tabs.Music:Input({
+    Title = "Custom Song ID",
+    Placeholder = "Enter Roblox Sound ID...",
+    Value = "",
+    Callback = function(val)
+        customSoundId = val
+    end
+})
+
+Tabs.Music:Button({
+    Title = "Play Music",
+    Desc = "Plays music on your boombox or character",
+    Callback = function()
+        local id = tonumber(customSoundId)
+        if not id then notify("Music", "Invalid Song ID") return end
+        local char = getChar()
+        local hrp = getHRP()
+        if not hrp then return end
+        local sound = hrp:FindFirstChild("YadsanXD_Music") or Instance.new("Sound")
+        sound.Name = "YadsanXD_Music"
+        sound.SoundId = "rbxassetid://" .. id
+        sound.Volume = 2
+        sound.Looped = true
+        sound.Parent = hrp
+        sound:Play()
+        notify("Music", "Playing Sound ID " .. id)
+    end
+})
+
+Tabs.Music:Button({
+    Title = "Stop Music",
+    Desc = "Stops playing character music",
+    Callback = function()
+        local hrp = getHRP()
+        local sound = hrp and hrp:FindFirstChild("YadsanXD_Music")
+        if sound then
+            sound:Stop()
+            sound:Destroy()
+            notify("Music", "Music stopped")
+        end
+    end
+})
+
+-- =========================================================================
+-- TAB 12: SETTINGS
+-- =========================================================================
+Tabs.Settings:Section({ Title = "Appearance" })
+
+Tabs.Settings:Dropdown({
+    Title = "Interface Theme",
+    Values = { "Default", "Rose", "Ember", "Amethyst", "Cobalt", "Frost" },
+    Value = "Default",
+    Callback = function(theme)
+        pcall(function()
+            if Window and Window.ChangeTheme then
+                Window:ChangeTheme(theme)
+            end
+            notify("Theme", "Changed theme to " .. theme)
+        end)
+    end
+})
+
+Tabs.Settings:Toggle({
+    Title = "Acrylic Blur",
+    Desc = "Toggles background glass blur (can cause UI lag when enabled)",
+    Value = false,
+    Callback = function(state)
+        -- Managed natively in Rayfield Gen2
+    end
+})
+
+Tabs.Settings:Section({ Title = "Script Session" })
+
+Tabs.Settings:Button({
+    Title = "Unload yadsanxd",
+    Desc = "Cleans up all connections and closes the interface",
+    Callback = function()
+        if YadsanXD.StopVehicle then pcall(YadsanXD.StopVehicle) end
+        YadsanXD.RocketSpam = false
+        for _, conn in pairs(YadsanXD.Connections) do
+            pcall(function() conn:Disconnect() end)
+        end
+        for _, obj in ipairs(YadsanXD.ESPObjects) do
+            pcall(function() obj:Destroy() end)
+        end
+        for _, obj in ipairs(YadsanXD.ActiveObjects) do
+            pcall(function() obj:Destroy() end)
+        end
+        pcall(function()
+            if Window then
+                if Window.Unload then
+                    Window:Unload()
+                elseif Window.Destroy then
+                    Window:Destroy()
+                end
+            end
+        end)
+        notify("YadsanXD", "Unloaded successfully")
+    end
+})
+
+selectDashboard()
+notify("YadsanXD", "Loaded successfully", 3)
