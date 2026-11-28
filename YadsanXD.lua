@@ -538,7 +538,7 @@ task.spawn(function()
         local ping = math.floor(game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValueString():match("%d+") or 0)
         local fps = math.floor(Workspace:GetRealPhysicsFPS())
         local players = #Players:GetPlayers()
-        StatsCard:SetDesc(string.format("Players: %d/32  |  Ping: %d ms  |  FPS: %d", players, ping, fps))
+        StatsCard:SetDesc(string.format("Players: %d/28  |  Ping: %d ms  |  FPS: %d", players, ping, fps))
     end
 end)
 
@@ -967,8 +967,8 @@ Tabs.Items:Button({
 Tabs.Items:Section({ Title = "Secret Items" })
 
 local SECRET_TOOLS_LIST = {
-    ["ChainSaw"] = "ChainSaw",
-    ["Money Gun"] = "MoneyGun",
+    ["Boom"] = "P",
+    ["Rocket Launcher"] = "32356064",
     ["Cannon"] = "Cannon",
     ["Nuclear Barrel"] = "NuclearBarrel",
     ["Snow Cannon"] = "SnowballCannon",
