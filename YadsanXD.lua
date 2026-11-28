@@ -41,7 +41,7 @@ local Camera = Workspace.CurrentCamera
 for _, p in ipairs({CoreGui, (gethui and gethui())}) do
     if p then
         for _, c in ipairs(p:GetChildren()) do
-            if c.Name == "WindUI" or c.Name:sub(1, 7) == "WindUI/" or c.Name == "Rayfield" or c.Name:sub(1, 8) == "Rayfield" then
+            if c.Name == "WindUI" or c.Name:sub(1, 7) == "WindUI/" or c.Name == "YadsanXD" or c.Name:sub(1, 8) == "YadsanXD" then
                 pcall(function() c:Destroy() end)
             end
         end
@@ -106,7 +106,7 @@ local function loadRayfield()
         end
     end
 
-    error("Failed to load Rayfield Gen2 from GitHub release mirrors and sirius.menu.", 0)
+    error("Failed to load YadsanXD V1.0 from GitHub release mirrors and sirius.menu.", 0)
 end
 
 local Rayfield = loadRayfield()
