@@ -282,15 +282,6 @@ local FLAME_PALETTES = {
     Dark = { Color = Color3.fromRGB(20, 20, 20), Secondary = Color3.fromRGB(5, 5, 5) },
 }
 
-local AUDIO_TRACKS = {
-    ["Drift Phonk"] = 1843559048,
-    ["Hardstyle Bass"] = 1837135064,
-    ["Midnight Drive"] = 1843404009,
-    ["Chill Echoes"] = 1843493489,
-    ["Vibe Beat"] = 1843423456,
-    ["Cyber City"] = 1842884920,
-}
-
 local ALL_GAME_TOOLS = {
     "AA-12", "AUG", "AmberStaff", "Apple", "AppleGreen", "Axe", "BabyBottle", "BabyBoy",
     "BabyGirl", "BabyHippo", "BabyMonkey", "BabyRattle", "Balloon", "Banana", "Baseball",
@@ -512,7 +503,6 @@ local Tabs = {
     Items = createTab({ Title = "Items & Dupe", Icon = "package" }),
     Vehicles = createTab({ Title = "Vehicles", Icon = "car" }),
     Target = createTab({ Title = "Target & Troll", Icon = "crosshair" }),
-    Family = createTab({ Title = "Family & Baby", Icon = "heart" }),
     House = createTab({ Title = "House", Icon = "lock" }),
     Visuals = createTab({ Title = "Visuals & ESP", Icon = "eye" }),
     Outfits = createTab({ Title = "Outfits", Icon = "shirt" }),
@@ -1532,75 +1522,6 @@ Tabs.Target:Button({
 })
 
 -- =========================================================================
--- TAB 7: FAMILY & BABY
--- =========================================================================
-Tabs.Family:Section({ Title = "Family Controls" })
-
-Tabs.Family:Button({
-    Title = "Create Family",
-    Desc = "Creates your in-game family (Required for baby features)",
-    Callback = function()
-        if Remotes.BabyFollow then
-            Remotes.BabyFollow:FireServer("CreateFamily")
-            notify("Family", "Created family")
-        end
-    end
-})
-
-Tabs.Family:Button({
-    Title = "Invite All Players to Family",
-    Desc = "Sends family invites to everyone in the server",
-    Callback = function()
-        if Remotes.PlayerTrigger then
-            for _, p in ipairs(Players:GetPlayers()) do
-                if p ~= LocalPlayer then
-                    Remotes.PlayerTrigger:FireServer("FamilyInvite", p)
-                end
-            end
-            notify("Family", "Invited all players to family")
-        end
-    end
-})
-
-Tabs.Family:Section({ Title = "Baby Controls" })
-
-Tabs.Family:Button({
-    Title = "Send Baby Boy",
-    Desc = "Spawns a baby that follows you or your target",
-    Callback = function()
-        if Remotes.BabyFollow then
-            Remotes.BabyFollow:FireServer("SpawnChild", "Boy")
-            if YadsanXD.TargetPlayer then
-                Remotes.BabyFollow:FireServer("CharacterFollowSpawnPlayer", YadsanXD.TargetPlayer.Name)
-            end
-            notify("Baby", "Spawned baby")
-        end
-    end
-})
-
-Tabs.Family:Button({
-    Title = "Respawn Baby Boy",
-    Desc = "Respawns your baby boy next to you",
-    Callback = function()
-        if Remotes.BabyFollow then
-            Remotes.BabyFollow:FireServer("SpawnChild", "Boy")
-            notify("Baby", "Respawned baby")
-        end
-    end
-})
-
-Tabs.Family:Button({
-    Title = "Delete Baby",
-    Desc = "Removes following baby character",
-    Callback = function()
-        if Remotes.BabyFollow then
-            Remotes.BabyFollow:FireServer("DeleteFollowCharacter")
-            notify("Baby", "Deleted baby")
-        end
-    end
-})
-
--- =========================================================================
 -- TAB 8: HOUSE
 -- =========================================================================
 Tabs.House:Section({ Title = "House Security" })
@@ -1905,30 +1826,6 @@ Tabs.Outfits:Button({
     end
 })
 
-Tabs.Outfits:Section({ Title = "Custom Outfits" })
-
-local PRESET_STYLES = {
-    ["Midnight Enforcer"] = { Shirt = 10185794567, Pants = 10185802213 },
-    ["Cyber Soldier"] = { Shirt = 8295628172, Pants = 8295632194 },
-    ["Gold Luxury"] = { Shirt = 6982405781, Pants = 6982408922 },
-}
-
-for name, outfit in pairs(PRESET_STYLES) do
-    Tabs.Outfits:Button({
-        Title = name,
-        Desc = "Applies " .. name .. " outfit",
-        Callback = function()
-            local char = getChar()
-            if not char then return end
-            local shirt = char:FindFirstChildOfClass("Shirt") or Instance.new("Shirt", char)
-            local pants = char:FindFirstChildOfClass("Pants") or Instance.new("Pants", char)
-            shirt.ShirtTemplate = "rbxassetid://" .. outfit.Shirt
-            pants.PantsTemplate = "rbxassetid://" .. outfit.Pants
-            notify("Outfits", "Equipped " .. name)
-        end
-    })
-end
-
 -- =========================================================================
 -- TAB 11: MUSIC
 -- =========================================================================
@@ -1977,27 +1874,6 @@ Tabs.Music:Button({
         end
     end
 })
-
-Tabs.Music:Section({ Title = "Track Library" })
-
-for title, id in pairs(AUDIO_TRACKS) do
-    Tabs.Music:Button({
-        Title = "Play " .. title,
-        Desc = "Stream " .. title,
-        Callback = function()
-            local hrp = getHRP()
-            if not hrp then return end
-            local sound = hrp:FindFirstChild("YadsanXD_Music") or Instance.new("Sound")
-            sound.Name = "YadsanXD_Music"
-            sound.SoundId = "rbxassetid://" .. id
-            sound.Volume = 2
-            sound.Looped = true
-            sound.Parent = hrp
-            sound:Play()
-            notify("Music", "Now Playing: " .. title)
-        end
-    })
-end
 
 -- =========================================================================
 -- TAB 12: SETTINGS
