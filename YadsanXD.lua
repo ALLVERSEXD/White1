@@ -1,12 +1,12 @@
 --[[
     YadsanXD
-    brookhaven edition
+    Life Together Rp edition
 --]]
 
 local YadsanXD = {
-    Version = "2.7.0",
+    Version = "v1.0",
     Title = "YadsanXD",
-    SubTitle = "NEW UPDATE | brookhaven",
+    SubTitle = "NEW UPDATE | Life Together Rp",
     Connections = {},
     Toggles = {},
     ESPObjects = {},
@@ -327,7 +327,7 @@ local ALL_GAME_TOOLS = {
 
 Window = Rayfield:CreateWindow({
     Name = "YadsanXD",
-    Subtitle = "NEW UPDATE | brookhaven",
+    Subtitle = "NEW UPDATE | Life Together Rp",
     Theme = "Default",
 })
 
